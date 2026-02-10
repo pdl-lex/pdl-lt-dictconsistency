@@ -1,0 +1,15 @@
+.web
+.states
+*.py[cod]
+assets/external/
+*.db
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv

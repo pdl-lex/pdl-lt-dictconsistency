@@ -1,0 +1,13 @@
+[project]
+name = "pdl-ltlabtools-dictconsistency"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "fastapi>=0.128.0",
+    "lxml>=6.0.2",
+    "pandas>=3.0.0",
+    "reflex>=0.8.26",
+    "lt_reflex_ag_grid_wrapper @ git+https://github.com/lexoterm/lt_reflex_ag_grid_wrapper.git",
+]
