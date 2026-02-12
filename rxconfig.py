@@ -1,7 +1,7 @@
 import reflex as rx
 
 config = rx.Config(
-    app_name="pdl_ltlabtools_dictconsistency",
+    app_name="pdl_lt_dictconsistency",
     backend_host="0.0.0.0",
     frontend_path="/dictconsistency",
     # api_url="/dictconsistency",
