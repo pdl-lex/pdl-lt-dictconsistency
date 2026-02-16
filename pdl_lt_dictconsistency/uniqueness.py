@@ -1,6 +1,5 @@
 import reflex as rx
 from pathlib import Path
-import pandas as pd
 from lxml import etree
 from pdl_lt_reflex_aggrid_wrapper import ag_grid
 
@@ -645,7 +644,7 @@ def uniqueness_page() -> rx.Component:
                     "EINMALIGKEIT", size="4", color="var(--jade-12)", weight="light"
                 ),
                 rx.cond(
-                    ~FileState.has_files,
+                    not FileState.has_files,
                     rx.callout(
                         "Bitte zuerst unter 'Daten' Dateien laden.",
                         icon="triangle-alert",

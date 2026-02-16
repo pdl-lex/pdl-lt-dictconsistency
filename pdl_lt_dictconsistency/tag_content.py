@@ -219,7 +219,8 @@ class TagContentState(FileState):
                         try:
                             tag_name = etree.QName(elem).localname
                             tags_set.add(tag_name)
-                        except:
+                        except Exception as e:
+                            print(f"Fehler beim Verarbeiten eines Elements in {filename}: {e}")
                             continue
 
             except Exception as e:
