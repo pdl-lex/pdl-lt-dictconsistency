@@ -644,7 +644,7 @@ def uniqueness_page() -> rx.Component:
                     "EINMALIGKEIT", size="4", color="var(--jade-12)", weight="light"
                 ),
                 rx.cond(
-                    not FileState.has_files,
+                    ~FileState.has_files,
                     rx.callout(
                         "Bitte zuerst unter 'Daten' Dateien laden.",
                         icon="triangle-alert",

@@ -737,7 +737,7 @@ def tag_content_input() -> rx.Component:
                 width="100%",
             ),
             rx.cond(
-                not TagContentState.is_searching,
+                ~TagContentState.is_searching,
                 rx.cond(
                     TagContentState.tag_not_found,
                     rx.callout(
