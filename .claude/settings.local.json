@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git log:*)",
+      "Bash(find:*)",
+      "Bash(python -m reflex:*)",
+      "Bash(reflex run)",
+      "Bash(python:*)",
+      "Bash(where:*)",
+      "Bash(pip show:*)",
+      "Bash(findstr:*)",
+      "Bash(uv run reflex run:*)",
+      "Bash(uv run which:*)",
+      "Bash(uv run:*)",
+      "Bash(.venvScriptsreflex.exe run)",
+      "Bash(\".venv/Scripts/reflex.exe\" run)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:fossies.org)"
+    ]
+  }
+}

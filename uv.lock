@@ -205,14 +205,6 @@ wheels = [
 ]
 
 [[package]]
-name = "lt-reflex-ag-grid-wrapper"
-version = "0.1.0"
-source = { git = "https://github.com/lexoterm/lt_reflex_ag_grid_wrapper.git#03eaeeed94d457b78ca9a4272001bcde2afc9662" }
-dependencies = [
-    { name = "reflex" },
-]
-
-[[package]]
 name = "lxml"
 version = "6.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -368,23 +360,31 @@ wheels = [
 ]
 
 [[package]]
+name = "pdl-lt-reflex-aggrid-wrapper"
+version = "0.1.0"
+source = { git = "https://github.com/pdl-lex/pdl-lt-reflex-aggrid-wrapper.git#2334523241d1e45cb853562f6d350f0d12a48415" }
+dependencies = [
+    { name = "reflex" },
+]
+
+[[package]]
 name = "pdl-ltlabtools-dictconsistency"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
-    { name = "lt-reflex-ag-grid-wrapper" },
     { name = "lxml" },
     { name = "pandas" },
+    { name = "pdl-lt-reflex-aggrid-wrapper" },
     { name = "reflex" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.128.0" },
-    { name = "lt-reflex-ag-grid-wrapper", git = "https://github.com/lexoterm/lt_reflex_ag_grid_wrapper.git" },
     { name = "lxml", specifier = ">=6.0.2" },
     { name = "pandas", specifier = ">=3.0.0" },
+    { name = "pdl-lt-reflex-aggrid-wrapper", git = "https://github.com/pdl-lex/pdl-lt-reflex-aggrid-wrapper.git" },
     { name = "reflex", specifier = ">=0.8.26" },
 ]
 

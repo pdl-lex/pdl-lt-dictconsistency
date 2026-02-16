@@ -9,5 +9,5 @@ dependencies = [
     "lxml>=6.0.2",
     "pandas>=3.0.0",
     "reflex>=0.8.26",
-    "lt_reflex_ag_grid_wrapper @ git+https://github.com/lexoterm/lt_reflex_ag_grid_wrapper.git",
+    "pdl_lt_reflex_aggrid_wrapper @ git+https://github.com/pdl-lex/pdl-lt-reflex-aggrid-wrapper.git",
 ]
