@@ -1,27 +1,10 @@
 import reflex as rx
 from pathlib import Path
 from lxml import etree
+from pdl_lt_reflex_aggrid_wrapper import ag_grid
 
 from .state import FileState
-from .components import (
-    base_layout,
-    page_heading,
-    section_heading,
-    no_files_warning,
-    error_callout,
-    results_grid,
-    COLOR_DANGER,
-    HEADING_SECTION,
-)
-
-
-TAG_CONTENT_COLUMN_DEFS = [
-    {"field": "filename", "headerName": "Dateiname", "sortable": True, "filter": True},
-    {"field": "subdir", "headerName": "Unterverzeichnis", "sortable": True, "filter": True},
-    {"field": "line", "headerName": "Zeile", "sortable": True, "filter": True},
-    {"field": "tag", "headerName": "Tag", "sortable": True, "filter": True},
-    {"field": "text", "headerName": "Inhalt", "sortable": True, "filter": True},
-]
+from .components import base_layout, page_heading, section_heading, no_files_warning, COLOR_DANGER, HEADING_SECTION
 
 
 class TagContentState(rx.State):
@@ -44,7 +27,15 @@ class TagContentState(rx.State):
     is_loading_tags: bool = False
     tag_not_found: bool = False
 
-    # Backend var: cached from FileState for progress display
+    # File preview
+    show_preview_dialog: bool = False
+    preview_filename: str = ""
+    preview_content: str = ""
+    preview_line: int = 0
+    selected_rows: list[dict] = []
+
+    # Backend vars: cached from FileState for synchronous access
+    _directory_path: str = ""
     _total_files: int = 0
 
     @rx.var
@@ -61,6 +52,42 @@ class TagContentState(rx.State):
     def total_files(self) -> int:
         """Return total file count for progress display."""
         return self._total_files
+
+    @rx.var
+    def preview_content_with_line_numbers(self) -> str:
+        """Format preview content with line numbers, highlighting the target line."""
+        if not self.preview_content:
+            return ""
+
+        lines = self.preview_content.split("\n")
+        max_line_num = len(lines)
+        num_width = len(str(max_line_num))
+
+        html_lines = []
+        for i, line in enumerate(lines, start=1):
+            escaped_line = (
+                line.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;")
+            )
+
+            if i == self.preview_line:
+                html_lines.append(
+                    f'<div style="background-color: var(--yellow-3); border-left: 3px solid var(--yellow-9);">'
+                    f'<span style="color: var(--gray-11); margin-right: 1em; user-select: none; display: inline-block; width: {num_width}ch; text-align: right;">{i}</span>'
+                    f"<span>{escaped_line}</span>"
+                    f"</div>"
+                )
+            else:
+                html_lines.append(
+                    f"<div>"
+                    f'<span style="color: var(--gray-11); margin-right: 1em; user-select: none; display: inline-block; width: {num_width}ch; text-align: right;">{i}</span>'
+                    f"<span>{escaped_line}</span>"
+                    f"</div>"
+                )
+
+        return "\n".join(html_lines)
 
     def set_search_mode(self, value: str) -> None:
         """Switch between single tag and multi-tag search mode."""
@@ -92,10 +119,49 @@ class TagContentState(rx.State):
         """Append a newline character to the search text."""
         self.search_text += "\n"
 
-    def download_csv(self) -> rx.event.EventSpec | None:
-        """Download search results as CSV."""
-        from .components import make_csv_download
-        return make_csv_download(self.content_results, "tag_content_results.csv")
+    def set_selected_rows(self, rows: list[dict]) -> None:
+        """Store selected grid rows."""
+        self.selected_rows = rows if rows else []
+
+    def open_file_preview(self, row_data: dict) -> None:
+        """Open file preview dialog for the selected row. Uses cached _directory_path."""
+        try:
+            subdir = row_data.get("subdir", ".")
+            filename = row_data.get("filename", "")
+            line = row_data.get("line", 0)
+
+            if not filename:
+                return
+
+            base_path = Path(self._directory_path).expanduser()
+            if subdir == ".":
+                file_path = base_path / filename
+            else:
+                file_path = base_path / subdir / filename
+
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.preview_filename = filename
+            self.preview_content = content
+            self.preview_line = line
+            self.show_preview_dialog = True
+
+        except Exception as e:
+            print(f"Error opening preview: {e}")
+            self.error_message = f"Fehler beim Öffnen der Datei: {str(e)}"
+
+    def close_preview(self) -> None:
+        """Close the file preview dialog."""
+        self.show_preview_dialog = False
+        self.preview_filename = ""
+        self.preview_content = ""
+        self.preview_line = 0
+
+    def open_selected_file(self) -> None:
+        """Open preview for the currently selected grid row."""
+        if self.selected_rows and len(self.selected_rows) > 0:
+            self.open_file_preview(self.selected_rows[0])
 
     def exclude_tag(self, tag: str) -> None:
         """Move tag from included to excluded list."""
@@ -120,11 +186,14 @@ class TagContentState(rx.State):
         self.error_message = ""
         yield
 
+        # Load file data from FileState on demand
         file_state = await self.get_state(FileState)
         if not file_state.directory_path or not file_state.xml_files_data:
             self.error_message = "Keine XML-Dateien geladen."
             self.is_loading_tags = False
             return
+
+        self._directory_path = file_state.directory_path
 
         base_path = Path(file_state.directory_path).expanduser()
         tags_set: set[str] = set()
@@ -143,6 +212,7 @@ class TagContentState(rx.State):
                     doc = etree.parse(f)
 
                 for elem in doc.iter():
+                    # Only process real elements (skip comments, PIs, etc.)
                     if isinstance(elem.tag, str):
                         try:
                             tag_name = etree.QName(elem).localname
@@ -162,9 +232,11 @@ class TagContentState(rx.State):
     def _get_element_text(self, elem: etree._Element, include_whitespace: bool) -> str:
         """Extract direct text content from element (excluding child element text)."""
         text = elem.text or ""
+
         if not include_whitespace:
             text = text.strip()
             text = " ".join(text.split())
+
         return text
 
     def _format_text_with_visible_whitespace(self, text: str) -> str:
@@ -183,12 +255,15 @@ class TagContentState(rx.State):
         self.tag_not_found = False
         yield
 
+        # Load file data from FileState on demand
         file_state = await self.get_state(FileState)
         if not file_state.directory_path or not file_state.xml_files_data:
             self.error_message = "Keine XML-Dateien geladen."
             self.is_searching = False
             return
 
+        # Cache for synchronous preview access
+        self._directory_path = file_state.directory_path
         self._total_files = len(file_state.xml_files_data)
 
         # Determine tags to search
@@ -234,7 +309,9 @@ class TagContentState(rx.State):
                         tag_found_in_documents = True
 
                     for elem in elements:
-                        elem_text = self._get_element_text(elem, self.include_whitespace)
+                        elem_text = self._get_element_text(
+                            elem, self.include_whitespace
+                        )
 
                         # Skip formatting whitespace (indentation after newlines)
                         if self.include_whitespace and elem_text:
@@ -242,16 +319,22 @@ class TagContentState(rx.State):
                                 continue
 
                         match = False
+
                         if self.search_text:
                             search_term = self.search_text
+
                             if not self.include_whitespace:
                                 search_term_normalized = " ".join(search_term.split())
-                                if search_term_normalized and search_term_normalized in elem_text:
+                                if (
+                                    search_term_normalized
+                                    and search_term_normalized in elem_text
+                                ):
                                     match = True
                             else:
                                 if search_term in elem_text:
                                     match = True
                         else:
+                            # Find non-empty tags
                             if elem_text:
                                 match = True
 
@@ -259,7 +342,10 @@ class TagContentState(rx.State):
                             display_text = elem_text
                             if len(display_text) > 200:
                                 display_text = display_text[:200] + "..."
-                            display_text = self._format_text_with_visible_whitespace(display_text)
+
+                            display_text = self._format_text_with_visible_whitespace(
+                                display_text
+                            )
 
                             results.append(
                                 {
@@ -280,8 +366,10 @@ class TagContentState(rx.State):
                 yield
 
         self.content_results = results
+
         if is_single_tag_mode and not tag_found_in_documents:
             self.tag_not_found = True
+
         self.is_searching = False
 
 
@@ -290,6 +378,40 @@ class TagContentState(rx.State):
 
 def tag_content_input() -> rx.Component:
     """Input form and results table for tag content search."""
+
+    column_defs = [
+        ag_grid.column_def(
+            field="filename",
+            header_name="Dateiname",
+            sortable=True,
+            filter=True,
+        ),
+        ag_grid.column_def(
+            field="subdir",
+            header_name="Unterverzeichnis",
+            sortable=True,
+            filter=True,
+        ),
+        ag_grid.column_def(
+            field="line",
+            header_name="Zeile",
+            sortable=True,
+            filter=True,
+        ),
+        ag_grid.column_def(
+            field="tag",
+            header_name="Tag",
+            sortable=True,
+            filter=True,
+        ),
+        ag_grid.column_def(
+            field="text",
+            header_name="Inhalt",
+            sortable=True,
+            filter=True,
+        ),
+    ]
+
     return rx.vstack(
         section_heading("Suchmodus", margin_top="20px"),
         # Mode selection
@@ -320,6 +442,7 @@ def tag_content_input() -> rx.Component:
         rx.cond(
             TagContentState.search_mode == "Mehrere Tags",
             rx.vstack(
+                # Load tags button
                 rx.cond(
                     (TagContentState.all_tags.length() == 0)
                     & ~TagContentState.is_loading_tags,
@@ -329,11 +452,14 @@ def tag_content_input() -> rx.Component:
                         variant="solid",
                     ),
                 ),
+                # Loading indicator
                 rx.cond(
                     TagContentState.is_loading_tags,
                     rx.hstack(
                         rx.spinner(),
-                        rx.callout("Lade Tags aus allen Dokumenten..."),
+                        rx.callout(
+                            "Lade Tags aus allen Dokumenten...",
+                        ),
                         spacing="2",
                         align="center",
                     ),
@@ -342,15 +468,26 @@ def tag_content_input() -> rx.Component:
                 rx.cond(
                     TagContentState.included_tags.length() > 0,
                     rx.vstack(
-                        rx.heading("Durchsuchte Tags", size="2", color=HEADING_SECTION),
-                        rx.text("Klicken Sie auf das X, um Tags auszuschließen:", size="1", color="gray"),
+                        rx.heading(
+                            "Durchsuchte Tags", size="2", color=HEADING_SECTION
+                        ),
+                        rx.text(
+                            "Klicken Sie auf das X, um Tags auszuschließen:",
+                            size="1",
+                            color="gray",
+                        ),
                         rx.box(
                             rx.foreach(
                                 TagContentState.included_tags,
                                 lambda tag: rx.badge(
                                     rx.hstack(
                                         rx.text(tag),
-                                        rx.icon("x", size=14, cursor="pointer", on_click=TagContentState.exclude_tag(tag)),
+                                        rx.icon(
+                                            "x",
+                                            size=14,
+                                            cursor="pointer",
+                                            on_click=TagContentState.exclude_tag(tag),
+                                        ),
                                         spacing="1",
                                     ),
                                     margin="2px",
@@ -372,8 +509,14 @@ def tag_content_input() -> rx.Component:
                 rx.cond(
                     TagContentState.excluded_tags.length() > 0,
                     rx.vstack(
-                        rx.heading("Ausgeschlossene Tags", size="2", color=COLOR_DANGER),
-                        rx.text("Klicken Sie auf einen Tag, um ihn wieder hinzuzufügen:", size="1", color="gray"),
+                        rx.heading(
+                            "Ausgeschlossene Tags", size="2", color=COLOR_DANGER
+                        ),
+                        rx.text(
+                            "Klicken Sie auf einen Tag, um ihn wieder hinzuzufügen:",
+                            size="1",
+                            color="gray",
+                        ),
                         rx.box(
                             rx.foreach(
                                 TagContentState.excluded_tags,
@@ -412,7 +555,12 @@ def tag_content_input() -> rx.Component:
         # Text search
         rx.vstack(
             rx.text("Suchtext (optional):", size="2"),
-            rx.text("Leer lassen, um alle nicht-leeren Tags zu finden.", size="1", color="gray", font_style="italic"),
+            rx.text(
+                "Leer lassen, um alle nicht-leeren Tags zu finden.",
+                size="1",
+                color="gray",
+                font_style="italic",
+            ),
             rx.hstack(
                 rx.input(
                     value=TagContentState.search_text,
@@ -422,17 +570,34 @@ def tag_content_input() -> rx.Component:
                     flex="1",
                     font_family="monospace",
                 ),
-                rx.button("·", on_click=TagContentState.insert_space, variant="outline", color_scheme="gray", size="2", title="Leerzeichen einfügen"),
-                rx.button("↵", on_click=TagContentState.insert_linebreak, variant="outline", color_scheme="gray", size="2", title="Zeilenumbruch einfügen"),
+                rx.button(
+                    "·",
+                    on_click=TagContentState.insert_space,
+                    variant="outline",
+                    color_scheme="gray",
+                    size="2",
+                    title="Leerzeichen einfügen",
+                ),
+                rx.button(
+                    "↵",
+                    on_click=TagContentState.insert_linebreak,
+                    variant="outline",
+                    color_scheme="gray",
+                    size="2",
+                    title="Zeilenumbruch einfügen",
+                ),
                 width="100%",
                 spacing="2",
             ),
+            # Visual preview with visible whitespace
             rx.cond(
                 TagContentState.search_text != "",
                 rx.box(
                     rx.text(
                         "Vorschau: ",
-                        TagContentState.search_text.replace(" ", "·").replace("\n", "↵\n").replace("\r", "↵"),
+                        TagContentState.search_text.replace(" ", "·")
+                        .replace("\n", "↵\n")
+                        .replace("\r", "↵"),
                         size="1",
                         font_family="monospace",
                         color=HEADING_SECTION,
@@ -451,7 +616,11 @@ def tag_content_input() -> rx.Component:
         rx.button(
             rx.cond(
                 TagContentState.is_searching,
-                rx.hstack(rx.spinner(size="3"), rx.text("Suchen..."), spacing="2"),
+                rx.hstack(
+                    rx.spinner(size="3"),
+                    rx.text("Suchen..."),
+                    spacing="2",
+                ),
                 rx.text("Suchen"),
             ),
             on_click=TagContentState.search_tag_content,
@@ -464,25 +633,79 @@ def tag_content_input() -> rx.Component:
             TagContentState.is_searching,
             rx.hstack(
                 rx.spinner(),
-                rx.text("Durchsuche ", TagContentState.files_checked, " / ", TagContentState.total_files, " Dateien...", color=HEADING_SECTION),
+                rx.text(
+                    "Durchsuche ",
+                    TagContentState.files_checked,
+                    " / ",
+                    TagContentState.total_files,
+                    " Dateien...",
+                    color=HEADING_SECTION,
+                ),
                 spacing="2",
                 align="center",
             ),
         ),
-        error_callout(TagContentState.error_message),
+        # Error display
+        rx.cond(
+            TagContentState.error_message != "",
+            rx.callout(
+                TagContentState.error_message,
+                icon="message-circle-warning",
+                color_scheme=COLOR_DANGER,
+            ),
+        ),
+        section_heading("Ergebnisse"),
         # Results
         rx.cond(
             TagContentState.has_results,
             rx.vstack(
-                section_heading("Ergebnisse"),
-                rx.text(TagContentState.results_count, " Treffer gefunden", color=HEADING_SECTION, size="2", weight="bold"),
-                results_grid(
-                    grid_id="tag_content_grid",
+                rx.text(
+                    TagContentState.results_count,
+                    " Treffer gefunden",
+                    color=HEADING_SECTION,
+                    size="2",
+                    weight="bold",
+                ),
+                ag_grid(
+                    id="tag_content_grid",
                     row_data=TagContentState.content_results,
-                    column_defs=TAG_CONTENT_COLUMN_DEFS,
-                    csv_filename="tag_content_results.csv",
-                    download_handler=TagContentState.download_csv,
-                    show_preview=True,
+                    column_defs=column_defs,
+                    default_col_def={"flex": 1, "minWidth": 50},
+                    pagination=True,
+                    pagination_page_size=25,
+                    pagination_page_size_selector=[5, 10, 25, 50, 100, 250],
+                    resizable=True,
+                    csv_export_params={
+                        "fileName": "tag_content_results.csv",
+                        "allColumns": True,
+                        "columnSeparator": ";",
+                        "exportMode": "csv",
+                    },
+                    dom_layout="autoHeight",
+                    height="None",
+                    column_size="sizeToFit",
+                    row_selection={"mode": "singleRow"},
+                    on_selection_changed=TagContentState.set_selected_rows,
+                ),
+                rx.hstack(
+                    rx.button(
+                        rx.hstack(
+                            rx.icon("file-text", size=16),
+                            rx.text("Datei öffnen"),
+                            spacing="2",
+                        ),
+                        on_click=TagContentState.open_selected_file,
+                        variant="outline",
+                        disabled=TagContentState.selected_rows.length() == 0,
+                    ),
+                    rx.text(
+                        "Wählen Sie eine Zeile aus und klicken Sie auf 'Datei öffnen'.",
+                        size="1",
+                        color="gray",
+                        font_style="italic",
+                    ),
+                    spacing="2",
+                    align="center",
                 ),
                 spacing="3",
                 width="100%",
@@ -492,13 +715,76 @@ def tag_content_input() -> rx.Component:
                 rx.cond(
                     TagContentState.tag_not_found,
                     rx.callout(
-                        ["Der Tag '", TagContentState.single_tag_input, "' wurde in keinem Dokument gefunden."],
+                        [
+                            "Der Tag '",
+                            TagContentState.single_tag_input,
+                            "' wurde in keinem Dokument gefunden.",
+                        ],
                         icon="circle-x",
                         color_scheme=COLOR_DANGER,
                     ),
-                    rx.callout("Keine Treffer gefunden.", icon="info", color_scheme="gray"),
+                    rx.callout(
+                        "Keine Treffer gefunden.",
+                        icon="info",
+                        color_scheme="gray",
+                    ),
                 ),
             ),
+        ),
+        # File preview dialog
+        rx.dialog.root(
+            rx.dialog.content(
+                rx.vstack(
+                    rx.hstack(
+                        rx.dialog.title(
+                            TagContentState.preview_filename,
+                        ),
+                        rx.spacer(),
+                        rx.dialog.close(
+                            rx.icon_button(
+                                rx.icon("x"),
+                                variant="ghost",
+                                on_click=TagContentState.close_preview,
+                            ),
+                        ),
+                        width="100%",
+                        align_items="center",
+                    ),
+                    rx.dialog.description(
+                        "Treffer in Zeile: ",
+                        TagContentState.preview_line,
+                    ),
+                    rx.box(
+                        rx.html(
+                            TagContentState.preview_content_with_line_numbers,
+                        ),
+                        width="100%",
+                        height="500px",
+                        overflow_y="scroll",
+                        padding="10px",
+                        background_color="var(--gray-2)",
+                        border="1px solid var(--gray-6)",
+                        border_radius="4px",
+                        font_family="monospace",
+                        font_size="12px",
+                        line_height="1.5",
+                    ),
+                    rx.hstack(
+                        rx.button(
+                            "Schließen",
+                            on_click=TagContentState.close_preview,
+                            variant="solid",
+                        ),
+                        width="100%",
+                        justify="end",
+                    ),
+                    spacing="3",
+                    width="100%",
+                ),
+                max_width="900px",
+                width="90vw",
+            ),
+            open=TagContentState.show_preview_dialog,
         ),
         rx.spacer(height="30px"),
         spacing="4",
@@ -513,7 +799,9 @@ def tag_content_page() -> rx.Component:
             rx.vstack(
                 page_heading("INHALT & LEERE TAGS"),
                 no_files_warning(),
-                rx.text("Durchsuchen Sie Tags nach bestimmten Inhalten oder finden Sie nicht-leere Tags."),
+                rx.text(
+                    "Durchsuchen Sie Tags nach bestimmten Inhalten oder finden Sie nicht-leere Tags."
+                ),
                 tag_content_input(),
                 spacing="4",
             ),

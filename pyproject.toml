@@ -10,4 +10,7 @@ dependencies = [
     "pandas>=3.0.0",
     "reflex>=0.8.26",
     "pdl_lt_reflex_aggrid_wrapper @ git+https://github.com/pdl-lex/pdl-lt-reflex-aggrid-wrapper.git",
+    "httpx>=0.28.1",
+    "pillow>=11.0.0",
+    "pymupdf>=1.25.0",
 ]

@@ -111,22 +111,16 @@ def _register_pages() -> None:
     from .pathfinder import pathfinder_page
     from .tag_content import tag_content_page
     from .uniqueness import uniqueness_page
-    from .nesting import nesting_page
-    from .senses_stats import senses_stats_page
     from .settings import settings_page
     from .llm_query import llm_query_page
-    from .ocr_query import ocr_query_page
 
     PAGES["/data"] = data_page
     PAGES["/validator"] = validator_page
     PAGES["/pathfinder"] = pathfinder_page
     PAGES["/tag-content"] = tag_content_page
     PAGES["/uniqueness"] = uniqueness_page
-    PAGES["/nesting"] = nesting_page
-    PAGES["/senses-stats"] = senses_stats_page
     PAGES["/settings"] = settings_page
     PAGES["/llm-query"] = llm_query_page
-    PAGES["/ocr-query"] = ocr_query_page
 
 
 _register_pages()

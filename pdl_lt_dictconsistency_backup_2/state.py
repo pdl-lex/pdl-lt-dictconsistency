@@ -10,7 +10,7 @@ class FileState(rx.State):
     """Base state for file management. Holds loaded XML file metadata."""
 
     directory_path: str = ""
-    upload_mode: str = "Verzeichnispfad"
+    upload_mode: str = ""
     session_dir: str = ""
     xml_files_data: list[dict] = []
     error_message: str = ""

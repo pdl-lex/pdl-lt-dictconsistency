@@ -228,6 +228,12 @@ def upload_section() -> rx.Component:
                     column_defs=FILE_COLUMN_DEFS,
                     csv_filename="xml_files.csv",
                 ),
+                rx.spacer(height="30px"),
+                rx.text(
+                    "Tipp: Klicken Sie auf das Download-Symbol oben rechts in der Tabelle, um die Dateiliste als CSV-Datei herunterzuladen.",
+                    color="gray",
+                    size="2",
+                ),
                 spacing="3",
                 width="100%",
                 padding_bottom="20px",

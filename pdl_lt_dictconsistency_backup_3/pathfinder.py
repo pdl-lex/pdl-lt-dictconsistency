@@ -10,6 +10,7 @@ from .components import (
     no_files_warning,
     error_callout,
     results_grid,
+    COLOR_DANGER,
     HEADING_SECTION,
 )
 
@@ -33,6 +34,16 @@ class PathfinderState(rx.State):
     debug_output: str = ""
     error_message: str = ""
 
+    # File preview
+    show_preview_dialog: bool = False
+    preview_filename: str = ""
+    preview_content: str = ""
+    preview_line: int = 0
+    selected_rows: list[dict] = []
+
+    # Backend var: cached directory path for synchronous preview access
+    _directory_path: str = ""
+
     @rx.var
     def has_results(self) -> bool:
         """Check if search produced any results."""
@@ -42,6 +53,42 @@ class PathfinderState(rx.State):
     def results_count(self) -> int:
         """Return number of search results."""
         return len(self.path_results)
+
+    @rx.var
+    def preview_content_with_line_numbers(self) -> str:
+        """Format preview content with line numbers, highlighting the target line."""
+        if not self.preview_content:
+            return ""
+
+        lines = self.preview_content.split("\n")
+        max_line_num = len(lines)
+        num_width = len(str(max_line_num))
+
+        html_lines = []
+        for i, line in enumerate(lines, start=1):
+            escaped_line = (
+                line.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;")
+            )
+
+            if i == self.preview_line:
+                html_lines.append(
+                    f'<div style="background-color: var(--yellow-3); border-left: 3px solid var(--yellow-9);">'
+                    f'<span style="color: var(--gray-11); margin-right: 1em; user-select: none; display: inline-block; width: {num_width}ch; text-align: right;">{i}</span>'
+                    f"<span>{escaped_line}</span>"
+                    f"</div>"
+                )
+            else:
+                html_lines.append(
+                    f"<div>"
+                    f'<span style="color: var(--gray-11); margin-right: 1em; user-select: none; display: inline-block; width: {num_width}ch; text-align: right;">{i}</span>'
+                    f"<span>{escaped_line}</span>"
+                    f"</div>"
+                )
+
+        return "\n".join(html_lines)
 
     @rx.event
     def handle_key_down(self, key: str) -> None:
@@ -53,6 +100,50 @@ class PathfinderState(rx.State):
     def set_text(self, value: str) -> None:
         """Update the search input field."""
         self.user_input = value
+
+    def set_selected_rows(self, rows: list[dict]) -> None:
+        """Store selected grid rows."""
+        self.selected_rows = rows if rows else []
+
+    def open_file_preview(self, row_data: dict) -> None:
+        """Open file preview dialog for the selected row. Uses cached _directory_path."""
+        try:
+            subdir = row_data.get("subdir", ".")
+            filename = row_data.get("filename", "")
+            line = row_data.get("line", 0)
+
+            if not filename:
+                return
+
+            base_path = Path(self._directory_path).expanduser()
+            if subdir == ".":
+                file_path = base_path / filename
+            else:
+                file_path = base_path / subdir / filename
+
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            self.preview_filename = filename
+            self.preview_content = content
+            self.preview_line = line
+            self.show_preview_dialog = True
+
+        except Exception as e:
+            print(f"Error opening preview: {e}")
+            self.error_message = f"Fehler beim Öffnen der Datei: {str(e)}"
+
+    def close_preview(self) -> None:
+        """Close the file preview dialog."""
+        self.show_preview_dialog = False
+        self.preview_filename = ""
+        self.preview_content = ""
+        self.preview_line = 0
+
+    def open_selected_file(self) -> None:
+        """Open preview for the currently selected grid row."""
+        if self.selected_rows and len(self.selected_rows) > 0:
+            self.open_file_preview(self.selected_rows[0])
 
     def download_csv(self) -> rx.event.EventSpec | None:
         """Download search results as CSV."""
@@ -115,6 +206,9 @@ class PathfinderState(rx.State):
             self.error_message = "Keine XML-Dateien geladen."
             self.is_searching = False
             return
+
+        # Cache directory path for synchronous preview access
+        self._directory_path = file_state.directory_path
 
         search_params = self._parse_user_input()
         if search_params is None:
@@ -256,8 +350,28 @@ def pathfinder_input() -> rx.Component:
                     row_data=PathfinderState.path_results,
                     column_defs=PATHFINDER_COLUMN_DEFS,
                     csv_filename="pathfinder_results.csv",
+                    row_selection_handler=PathfinderState.set_selected_rows,
                     download_handler=PathfinderState.download_csv,
-                    show_preview=True,
+                ),
+                rx.hstack(
+                    rx.button(
+                        rx.hstack(
+                            rx.icon("file-text", size=16),
+                            rx.text("Datei öffnen"),
+                            spacing="2",
+                        ),
+                        on_click=PathfinderState.open_selected_file,
+                        variant="outline",
+                        disabled=PathfinderState.selected_rows.length() == 0,
+                    ),
+                    rx.text(
+                        "Wählen Sie eine Zeile aus und klicken Sie auf 'Datei öffnen'.",
+                        size="1",
+                        color="gray",
+                        font_style="italic",
+                    ),
+                    spacing="2",
+                    align="center",
                 ),
                 spacing="3",
                 width="100%",
@@ -267,6 +381,57 @@ def pathfinder_input() -> rx.Component:
                 color=HEADING_SECTION,
                 size="2",
             ),
+        ),
+        # File preview dialog
+        rx.dialog.root(
+            rx.dialog.content(
+                rx.vstack(
+                    rx.hstack(
+                        rx.dialog.title(PathfinderState.preview_filename),
+                        rx.spacer(),
+                        rx.dialog.close(
+                            rx.icon_button(
+                                rx.icon("x"),
+                                variant="ghost",
+                                on_click=PathfinderState.close_preview,
+                            ),
+                        ),
+                        width="100%",
+                        align_items="center",
+                    ),
+                    rx.dialog.description(
+                        "Treffer in Zeile: ",
+                        PathfinderState.preview_line,
+                    ),
+                    rx.box(
+                        rx.html(PathfinderState.preview_content_with_line_numbers),
+                        width="100%",
+                        height="500px",
+                        overflow_y="scroll",
+                        padding="10px",
+                        background_color="var(--gray-2)",
+                        border="1px solid var(--gray-6)",
+                        border_radius="4px",
+                        font_family="monospace",
+                        font_size="12px",
+                        line_height="1.5",
+                    ),
+                    rx.hstack(
+                        rx.button(
+                            "Schließen",
+                            on_click=PathfinderState.close_preview,
+                            variant="solid",
+                        ),
+                        width="100%",
+                        justify="end",
+                    ),
+                    spacing="3",
+                    width="100%",
+                ),
+                max_width="900px",
+                width="90vw",
+            ),
+            open=PathfinderState.show_preview_dialog,
         ),
         rx.spacer(height="30px"),
         spacing="4",

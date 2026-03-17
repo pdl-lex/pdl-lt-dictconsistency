@@ -46,14 +46,9 @@ NAV_STRUCTURE: list[tuple[str, list[tuple[str, str]]]] = [
         ("Tag- und Pfadsuche", "/pathfinder"),
         ("Inhalt / Leere Tags", "/tag-content"),
         ("Einmaligkeit", "/uniqueness"),
-        ("Verschachtelung", "/nesting"),
-    ]),
-    ("Bedeutungen", [
-        ("Anzahl und Länge", "/senses-stats"),
     ]),
     ("LLM", [
         ("Chat", "/llm-query"),
-        ("Texterkennung (OCR)", "/ocr-query"),
         ("LLM-Einstellungen", "/settings"),
     ]),
 ]

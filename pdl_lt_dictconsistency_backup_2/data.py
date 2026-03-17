@@ -1,26 +1,34 @@
 import reflex as rx
+from pdl_lt_reflex_aggrid_wrapper import ag_grid
 
 from .state import FileState, MAX_FILE_SIZE
-from .components import (
-    base_layout,
-    page_heading,
-    section_heading,
-    error_callout,
-    results_grid,
-    HEADING_SECTION,
-)
-
-
-# Shared column definitions for file listing grids
-FILE_COLUMN_DEFS = [
-    {"field": "filename", "headerName": "Dateiname", "sortable": True, "filter": True},
-    {"field": "subdir", "headerName": "Unterverzeichnis", "sortable": True, "filter": True},
-    {"field": "size_kb", "headerName": "Dateigröße (KB)", "sortable": True, "filter": True},
-]
+from .components import base_layout, page_heading, section_heading, COLOR_DANGER, HEADING_SECTION
 
 
 def select_data_input_method() -> rx.Component:
     """Main data input component with mode selection."""
+
+    column_defs = [
+        ag_grid.column_def(
+            field="filename",
+            header_name="Dateiname",
+            sortable=True,
+            filter=True,
+        ),
+        ag_grid.column_def(
+            field="subdir",
+            header_name="Unterverzeichnis",
+            sortable=True,
+            filter=True,
+        ),
+        ag_grid.column_def(
+            field="size_kb",
+            header_name="Dateigröße (KB)",
+            sortable=True,
+            filter=True,
+        ),
+    ]
+
     return rx.vstack(
         rx.vstack(
             section_heading("Modus", margin_top="0px"),
@@ -54,19 +62,20 @@ def select_data_input_method() -> rx.Component:
         ),
         rx.cond(
             FileState.upload_mode == "Verzeichnispfad",
-            path_input_section(),
+            path_input_section(column_defs),
         ),
         rx.cond(
             FileState.upload_mode == "Datei-Upload",
-            upload_section(),
+            upload_section(column_defs),
         ),
         spacing="4",
         width="100%",
     )
 
 
-def path_input_section() -> rx.Component:
+def path_input_section(column_defs: list) -> rx.Component:
     """Directory path input with scan button and results grid."""
+
     return rx.vstack(
         section_heading("Verzeichnispfad"),
         rx.text(
@@ -113,16 +122,25 @@ def path_input_section() -> rx.Component:
             FileState.is_loading,
             rx.hstack(
                 rx.spinner(),
-                rx.callout("Durchsuche Verzeichnis rekursiv nach XML-Dateien..."),
+                rx.callout(
+                    "Durchsuche Verzeichnis rekursiv nach XML-Dateien...",
+                ),
                 spacing="2",
                 align="center",
             ),
         ),
-        error_callout(FileState.error_message),
+        section_heading("Ergebnisse"),
+        rx.cond(
+            FileState.error_message != "",
+            rx.callout(
+                FileState.error_message,
+                icon="message-circle-warning",
+                color_scheme=COLOR_DANGER,
+            ),
+        ),
         rx.cond(
             FileState.has_files,
             rx.vstack(
-                section_heading("Ergebnisse"),
                 rx.text(
                     FileState.file_count,
                     " XML-Dateien gefunden",
@@ -130,11 +148,24 @@ def path_input_section() -> rx.Component:
                     size="2",
                     weight="bold",
                 ),
-                results_grid(
-                    grid_id="path_input_grid",
+                ag_grid(
+                    id="path_input_grid",
                     row_data=FileState.xml_files_data,
-                    column_defs=FILE_COLUMN_DEFS,
-                    csv_filename="xml_files.csv",
+                    column_defs=column_defs,
+                    default_col_def={"flex": 1, "minWidth": 50},
+                    pagination=True,
+                    pagination_page_size=25,
+                    pagination_page_size_selector=[5, 10, 25, 50, 100, 250],
+                    resizable=True,
+                    csv_export_params={
+                        "fileName": "xml_files.csv",
+                        "allColumns": True,
+                        "columnSeparator": ";",
+                        "exportMode": "csv",
+                    },
+                    dom_layout="autoHeight",
+                    height="None",
+                    column_size="sizeToFit",
                 ),
                 rx.spacer(height="30px"),
                 spacing="3",
@@ -146,8 +177,9 @@ def path_input_section() -> rx.Component:
     )
 
 
-def upload_section() -> rx.Component:
+def upload_section(column_defs: list) -> rx.Component:
     """File upload area with drag-and-drop and results grid."""
+
     return rx.vstack(
         rx.text(
             "Laden Sie eine oder mehrere XML-Dateien oder ein ZIP-Archiv hoch:",
@@ -205,16 +237,25 @@ def upload_section() -> rx.Component:
             FileState.is_loading,
             rx.hstack(
                 rx.spinner(),
-                rx.callout("Lade Dateien hoch und verarbeite..."),
+                rx.callout(
+                    "Lade Dateien hoch und verarbeite...",
+                ),
                 spacing="2",
                 align="center",
             ),
         ),
-        error_callout(FileState.error_message),
+        section_heading("Ergebnisse"),
+        rx.cond(
+            FileState.error_message != "",
+            rx.callout(
+                FileState.error_message,
+                icon="message-circle-warning",
+                color_scheme=COLOR_DANGER,
+            ),
+        ),
         rx.cond(
             FileState.has_files,
             rx.vstack(
-                section_heading("Ergebnisse"),
                 rx.text(
                     FileState.file_count,
                     " XML-Dateien gefunden",
@@ -222,11 +263,30 @@ def upload_section() -> rx.Component:
                     size="2",
                     weight="bold",
                 ),
-                results_grid(
-                    grid_id="upload_grid",
+                ag_grid(
+                    id="upload_grid",
                     row_data=FileState.xml_files_data,
-                    column_defs=FILE_COLUMN_DEFS,
-                    csv_filename="xml_files.csv",
+                    column_defs=column_defs,
+                    default_col_def={"flex": 1, "minWidth": 50},
+                    pagination=True,
+                    pagination_page_size=25,
+                    pagination_page_size_selector=[5, 10, 25, 50, 100, 250],
+                    resizable=True,
+                    csv_export_params={
+                        "fileName": "xml_files.csv",
+                        "allColumns": True,
+                        "columnSeparator": ";",
+                        "exportMode": "csv",
+                    },
+                    dom_layout="autoHeight",
+                    height="None",
+                    column_size="sizeToFit",
+                ),
+                rx.spacer(height="30px"),
+                rx.text(
+                    "Tipp: Klicken Sie auf das Download-Symbol oben rechts in der Tabelle, um die Dateiliste als CSV-Datei herunterzuladen.",
+                    color="gray",
+                    size="2",
                 ),
                 spacing="3",
                 width="100%",
