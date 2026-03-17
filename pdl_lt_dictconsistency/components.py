@@ -483,6 +483,59 @@ class MobileNavState(rx.State):
         self.is_open = False
 
 
+# def mobile_nav_drawer() -> rx.Component:
+#     """Slide-out navigation drawer for small screens."""
+#     nav_items: list[rx.Component] = []
+#     for i, (section, subitems) in enumerate(NAV_STRUCTURE):
+#         nav_items.append(
+#             rx.text(
+#                 section,
+#                 size="2",
+#                 weight="bold",
+#                 color=HEADING_PRIMARY,
+#                 margin_top="0px" if i == 0 else "8px",
+#             )
+#         )
+#         for name, route in subitems:
+#             nav_items.append(
+#                 rx.link(
+#                     rx.text(name, size="2", color="var(--gray-12)"),
+#                     href=route,
+#                     on_click=MobileNavState.close,
+#                     width="100%",
+#                     padding_left="8px",
+#                 )
+#             )
+
+#     return rx.drawer.root(
+#         rx.drawer.overlay(),
+#         rx.drawer.content(
+#             rx.vstack(
+#                 rx.hstack(
+#                     rx.heading("MENÜ", size="4", color=HEADING_PRIMARY, weight="light"),
+#                     rx.spacer(),
+#                     rx.icon_button(
+#                         rx.icon("x"),
+#                         variant="ghost",
+#                         color=HEADING_PRIMARY,
+#                         on_click=MobileNavState.close,
+#                     ),
+#                     width="100%",
+#                     align_items="center",
+#                 ),
+#                 *nav_items,
+#                 spacing="2",
+#                 padding=PANEL_PADDING,
+#                 width="100%",
+#             ),
+#             background_color=PANEL_BG,
+#             width="280px",
+#         ),
+#         open=MobileNavState.is_open,
+#         on_open_change=MobileNavState.set_is_open,
+#         direction="left",
+#     )
+
 def mobile_nav_drawer() -> rx.Component:
     """Slide-out navigation drawer for small screens."""
     nav_items: list[rx.Component] = []
@@ -506,19 +559,19 @@ def mobile_nav_drawer() -> rx.Component:
                     padding_left="8px",
                 )
             )
-
-    return rx.drawer.root(
-        rx.drawer.overlay(),
-        rx.drawer.content(
+    return rx.dialog.root(
+        rx.dialog.content(
             rx.vstack(
                 rx.hstack(
                     rx.heading("MENÜ", size="4", color=HEADING_PRIMARY, weight="light"),
                     rx.spacer(),
-                    rx.icon_button(
-                        rx.icon("x"),
-                        variant="ghost",
-                        color=HEADING_PRIMARY,
-                        on_click=MobileNavState.close,
+                    rx.dialog.close(
+                        rx.icon_button(
+                            rx.icon("x"),
+                            variant="ghost",
+                            color=HEADING_PRIMARY,
+                            on_click=MobileNavState.close,
+                        ),
                     ),
                     width="100%",
                     align_items="center",
@@ -529,13 +582,11 @@ def mobile_nav_drawer() -> rx.Component:
                 width="100%",
             ),
             background_color=PANEL_BG,
-            width="280px",
+            max_width="280px",
         ),
         open=MobileNavState.is_open,
         on_open_change=MobileNavState.set_is_open,
-        direction="left",
     )
-
 
 # ============ Layout ============
 
