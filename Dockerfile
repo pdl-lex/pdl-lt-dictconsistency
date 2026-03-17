@@ -25,8 +25,13 @@ COPY . .
 # Reflex initialisieren
 RUN uv run reflex init
 
+# Fix vaul SSR bug: document is not defined during prerender
+RUN sed -i 's/document\.body/typeof document !== "undefined" \&\& document.body/g' \
+    /app/.web/node_modules/vaul/dist/index.mjs
+
 # Ports exposen
 EXPOSE 3000
+EXPOSE 8000
 
 # Production mode
 ENV REFLEX_ENV=prod
