@@ -8,7 +8,7 @@ dependencies = [
     "fastapi>=0.128.0",
     "lxml>=6.0.2",
     "pandas>=3.0.0",
-    "reflex>=0.8.26",
+    "reflex==0.8.28",
     "pdl_lt_reflex_aggrid_wrapper @ git+https://github.com/pdl-lex/pdl-lt-reflex-aggrid-wrapper.git",
     "httpx>=0.28.1",
     "pillow>=11.0.0",
