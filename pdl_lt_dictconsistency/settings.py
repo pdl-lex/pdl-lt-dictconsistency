@@ -30,6 +30,10 @@ class LLMSettingsState(rx.State):
     selected_model: str = ""
     model_context_length: int = 0  # Max context in tokens (0 = unknown)
 
+    # --- OCR Model (separate selection for vision tasks) ---
+    selected_ocr_model: str = ""
+    ocr_model_context_length: int = 0
+
     # Backend var: model metadata from API (maps model id -> context length)
     _model_context_map: dict[str, int] = {}
 
@@ -48,6 +52,8 @@ class LLMSettingsState(rx.State):
         self.available_models = []
         self.selected_model = ""
         self.model_context_length = 0
+        self.selected_ocr_model = ""
+        self.ocr_model_context_length = 0
         self._model_context_map = {}
 
         if value == "LM Studio":
@@ -72,6 +78,8 @@ class LLMSettingsState(rx.State):
         self.connection_status = ""
         self.status_message = ""
         self.available_models = []
+        self.selected_model = ""
+        self.selected_ocr_model = ""
 
     def set_api_key(self, value: str) -> None:
         """Update API key."""
@@ -85,6 +93,13 @@ class LLMSettingsState(rx.State):
         # Fallback for known providers if API didn't report context length
         if self.model_context_length == 0:
             self.model_context_length = self._fallback_context_length(value)
+
+    def set_selected_ocr_model(self, value: str) -> None:
+        """Update selected OCR model and its context length."""
+        self.selected_ocr_model = value
+        self.ocr_model_context_length = self._model_context_map.get(value, 0)
+        if self.ocr_model_context_length == 0:
+            self.ocr_model_context_length = self._fallback_context_length(value)
 
     # ---- Connection test ----
 
@@ -145,6 +160,15 @@ class LLMSettingsState(rx.State):
                             self.model_context_length = (
                                 self._model_context_map.get(first, 0)
                                 or self._fallback_context_length(first)
+                            )
+                        if not self.selected_ocr_model:
+                            # Pre-select second model for OCR if available, else same as text
+                            sorted_models = sorted(models)
+                            ocr_default = sorted_models[1] if len(sorted_models) > 1 else sorted_models[0]
+                            self.selected_ocr_model = ocr_default
+                            self.ocr_model_context_length = (
+                                self._model_context_map.get(ocr_default, 0)
+                                or self._fallback_context_length(ocr_default)
                             )
                     else:
                         self.status_message = (
@@ -361,7 +385,7 @@ def connection_settings_section() -> rx.Component:
                 rx.cond(
                     LLMSettingsState.connection_status == "connected",
                     rx.vstack(
-                        rx.text("Modell:", size="2", weight="bold"),
+                        rx.text("Modell (Text / Chat):", size="2", weight="bold"),
                         rx.cond(
                             LLMSettingsState.available_models.length() > 0,
                             rx.select(
@@ -377,6 +401,22 @@ def connection_settings_section() -> rx.Component:
                                 width="100%",
                             ),
                         ),
+                        rx.text("Modell (OCR / Bilderkennung):", size="2", weight="bold"),
+                        rx.cond(
+                            LLMSettingsState.available_models.length() > 0,
+                            rx.select(
+                                LLMSettingsState.available_models,
+                                value=LLMSettingsState.selected_ocr_model,
+                                on_change=LLMSettingsState.set_selected_ocr_model,
+                                width="100%",
+                            ),
+                            rx.input(
+                                value=LLMSettingsState.selected_ocr_model,
+                                placeholder="Modellname eingeben...",
+                                on_change=LLMSettingsState.set_selected_ocr_model,
+                                width="100%",
+                            ),
+                        ),
                         spacing="2",
                         width="100%",
                     ),
@@ -385,14 +425,19 @@ def connection_settings_section() -> rx.Component:
                 rx.cond(
                     LLMSettingsState.has_active_llm,
                     rx.callout(
-                        rx.text(
-                            "Aktiv: ",
-                            rx.text.strong(LLMSettingsState.selected_model),
-                            " via ",
-                            LLMSettingsState.provider,
-                            " (Kontext: ",
-                            LLMSettingsState.context_length_display,
-                            " Tokens)",
+                        rx.vstack(
+                            rx.text(
+                                "Text/Chat: ",
+                                rx.text.strong(LLMSettingsState.selected_model),
+                                " (Kontext: ",
+                                LLMSettingsState.context_length_display,
+                                " Tokens)",
+                            ),
+                            rx.text(
+                                "OCR: ",
+                                rx.text.strong(LLMSettingsState.selected_ocr_model),
+                            ),
+                            spacing="1",
                         ),
                         icon="check",
                         color_scheme="green",

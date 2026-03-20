@@ -213,24 +213,27 @@ class LLMQueryState(rx.State):
         """Build the messages array for the LLM API call.
 
         Uses _api_messages as history (contains full file context from earlier turns).
-        Only adds file context to the current message if files are selected AND
-        this is the first message or the file selection changed.
+
+        Note: system role is not supported by all models (e.g. Mistral 7B).
+        The system prompt is prepended to the first user message instead.
         """
         messages = []
+        is_first_message = len(self._api_messages) == 0
 
-        # System prompt
-        if self.system_prompt:
-            messages.append({"role": "system", "content": self.system_prompt})
-
-        # Full API history from previous turns (already contains file contexts)
+        # Full API history from previous turns
         for msg in self._api_messages:
             messages.append({"role": msg["role"], "content": msg["content"]})
 
-        # Current user message with file context
+        # Current user message with optional file context
         if file_context:
             full_user_message = f"{file_context}\n\n{user_message}"
         else:
             full_user_message = user_message
+
+        # Prepend system prompt to first user message instead of using system role
+        # (some models like Mistral 7B only support user and assistant roles)
+        if is_first_message and self.system_prompt:
+            full_user_message = f"{self.system_prompt}\n\n{full_user_message}"
 
         messages.append({"role": "user", "content": full_user_message})
 

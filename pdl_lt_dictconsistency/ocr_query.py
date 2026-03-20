@@ -312,7 +312,7 @@ class OCRState(rx.State):
         import httpx
 
         payload = {
-            "model": settings.selected_model,
+            "model": settings.selected_ocr_model,
             "max_tokens": 4096,
             "messages": [{
                 "role": "user",
@@ -353,7 +353,7 @@ class OCRState(rx.State):
         import httpx
 
         payload = {
-            "model": settings.selected_model,
+            "model": settings.selected_ocr_model,
             "messages": [{
                 "role": "user",
                 "content": [
@@ -384,7 +384,7 @@ class OCRState(rx.State):
         import httpx
 
         payload = {
-            "model": settings.selected_model,
+            "model": settings.selected_ocr_model,
             "messages": [{"role": "user", "content": prompt, "images": [image_b64]}],
             "stream": False,
         }
@@ -595,7 +595,7 @@ def controls_section() -> rx.Component:
                 LLMSettingsState.has_active_llm,
                 rx.hstack(
                     rx.icon("circle-check", size=14, color="green"),
-                    rx.text(LLMSettingsState.active_model_display, size="2", color=TEXT_RESULT),
+                    rx.text(LLMSettingsState.selected_ocr_model, size="2", color=TEXT_RESULT),
                     spacing="2",
                     align="center",
                 ),
