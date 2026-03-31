@@ -43,10 +43,12 @@ NAV_STRUCTURE: list[tuple[str, list[tuple[str, str]]]] = [
     ]),
     ("XML", [
         ("XML/TL0 Validator", "/validator"),
+        ("Strukturanalyse", "/xml-structure"),
         ("Tag- und Pfadsuche", "/pathfinder"),
         ("Inhalt / Leere Tags", "/tag-content"),
         ("Einmaligkeit", "/uniqueness"),
         ("Verschachtelung", "/nesting"),
+
     ]),
     ("Bedeutungen", [
         ("Anzahl und Länge", "/senses-stats"),

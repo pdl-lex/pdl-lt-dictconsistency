@@ -116,6 +116,7 @@ def _register_pages() -> None:
     from .settings import settings_page
     from .llm_query import llm_query_page
     from .ocr_query import ocr_query_page
+    from .xml_structure import xml_structure_page
 
     PAGES["/data"] = data_page
     PAGES["/validator"] = validator_page
@@ -127,6 +128,7 @@ def _register_pages() -> None:
     PAGES["/settings"] = settings_page
     PAGES["/llm-query"] = llm_query_page
     PAGES["/ocr-query"] = ocr_query_page
+    PAGES["/xml-structure"] = xml_structure_page
 
 
 _register_pages()
