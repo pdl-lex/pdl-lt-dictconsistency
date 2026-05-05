@@ -5,6 +5,8 @@ from pathlib import Path
 MAX_ZIP_EXTRACT_SIZE = 100 * 1024 * 1024  # 100 MB
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB per file
 
+_DATA_DIR = Path(__file__).parent.parent / "data"
+
 
 class FileState(rx.State):
     """Base state for file management. Holds loaded XML file metadata."""
@@ -16,29 +18,297 @@ class FileState(rx.State):
     error_message: str = ""
     is_loading: bool = False
 
+    # --- "Vorliegende Daten" mode ---
+    data_folders: list[str] = []
+    selected_data_folder: str = ""
+    # Visible tree items (dirs always, files of expanded dirs)
+    data_tree: list[dict] = []
+    tree_search: str = ""
+    # Backend-only: never serialized to client
+    _dir_tree: list[dict] = []           # dirs from _dirs.json (tiny)
+    _file_cache: dict[str, list] = {}    # dir_path → file items (lazy loaded)
+    _selected_paths: list[str] = []
+    _expanded_paths: list[str] = []
+
     @rx.var
     def file_count(self) -> int:
-        """Return number of loaded XML files."""
         return len(self.xml_files_data)
 
     @rx.var
     def has_files(self) -> bool:
-        """Check if any XML files are loaded."""
         return len(self.xml_files_data) > 0
+
+    @rx.var
+    def has_data_tree(self) -> bool:
+        return len(self.data_tree) > 0
 
     def set_directory_path(self, value: str) -> None:
         """Update the directory path input."""
         self.directory_path = value
 
     def set_upload_mode(self, value: str) -> None:
-        """Switch between directory path and file upload mode."""
         self.upload_mode = value
+        if value == "Vorliegende Daten":
+            self._refresh_data_folders()
 
     @rx.event
     def handle_key_down(self, key: str) -> None:
         """Trigger directory scan on Enter key."""
         if key == "Enter":
             return FileState.scan_xml_files
+
+    # ---- "Vorliegende Daten" helpers ----
+
+    def _refresh_data_folders(self) -> None:
+        if _DATA_DIR.exists():
+            self.data_folders = sorted(
+                d.name for d in _DATA_DIR.iterdir()
+                if d.is_dir() and d.name != ".tree"
+            )
+        else:
+            self.data_folders = []
+        self.selected_data_folder = ""
+        self._reset_tree_state()
+
+    def _reset_tree_state(self) -> None:
+        self.data_tree = []
+        self.tree_search = ""
+        self._dir_tree = []
+        self._file_cache = {}
+        self._selected_paths = []
+        self._expanded_paths = []
+
+    def set_selected_data_folder(self, value: str) -> None:
+        self.selected_data_folder = value
+        self._reset_tree_state()
+
+    # ---- index helpers ----
+
+    def _index_base(self) -> Path:
+        return _DATA_DIR / ".tree" / self.selected_data_folder
+
+    def _file_json_path(self, dir_path: str) -> Path:
+        """Return the path to the per-dir file JSON."""
+        parts = dir_path.split("/")
+        p = self._index_base()
+        for part in parts[:-1]:
+            p = p / part
+        return p / f"{parts[-1]}.json"
+
+    def _load_dir_files(self, dir_path: str) -> list[dict]:
+        """Load and cache file items for one directory. Returns the items."""
+        import json
+        if dir_path in self._file_cache:
+            return self._file_cache[dir_path]
+        json_path = self._file_json_path(dir_path)
+        items: list[dict] = []
+        if json_path.exists():
+            try:
+                with open(json_path, encoding="utf-8") as f:
+                    items = json.load(f)
+            except Exception:
+                items = []
+        new_cache = dict(self._file_cache)
+        new_cache[dir_path] = items
+        self._file_cache = new_cache
+        return items
+
+    def _load_all_file_caches(self) -> None:
+        """Load file JSONs for every dir not yet cached (needed for full-text search)."""
+        for item in self._dir_tree:
+            if item["path"] not in self._file_cache:
+                self._load_dir_files(item["path"])
+
+    # ---- tree building ----
+
+    def _rebuild_visible_tree(self) -> None:
+        """Build data_tree: all visible dirs + files of expanded dirs."""
+        expanded = set(self._expanded_paths)
+        selected = set(self._selected_paths)
+        visible: list[dict] = []
+        for item in self._dir_tree:
+            parts = item["path"].split("/")
+            if len(parts) > 1:
+                if not all("/".join(parts[:i]) in expanded for i in range(1, len(parts))):
+                    continue
+            is_expanded = item["path"] in expanded
+            visible.append({
+                "path": item["path"],
+                "name": item["name"],
+                "is_dir": True,
+                "depth": item["depth"],
+                "selected": item["path"] in selected,
+                "expanded": is_expanded,
+                "file_count": item.get("file_count", 0),
+            })
+            if is_expanded:
+                for f in self._file_cache.get(item["path"], []):
+                    visible.append({
+                        "path": f["path"],
+                        "name": f["name"],
+                        "is_dir": False,
+                        "depth": f["depth"],
+                        "selected": f["path"] in selected,
+                        "expanded": False,
+                        "file_count": 0,
+                    })
+        self.data_tree = visible
+
+    # ---- public events ----
+
+    def set_tree_search(self, value: str) -> None:
+        self.tree_search = value
+        if not value:
+            self._rebuild_visible_tree()
+            return
+        self._load_all_file_caches()
+        search_lower = value.lower()
+        visible_paths: set[str] = set()
+        # Search dirs
+        for item in self._dir_tree:
+            if search_lower in item["name"].lower():
+                visible_paths.add(item["path"])
+                parts = item["path"].split("/")
+                for i in range(1, len(parts)):
+                    visible_paths.add("/".join(parts[:i]))
+        # Search files
+        for files in self._file_cache.values():
+            for f in files:
+                if search_lower in f["name"].lower():
+                    visible_paths.add(f["path"])
+                    parts = f["path"].split("/")
+                    for i in range(1, len(parts)):
+                        visible_paths.add("/".join(parts[:i]))
+        selected = set(self._selected_paths)
+        result: list[dict] = []
+        for item in self._dir_tree:
+            if item["path"] not in visible_paths:
+                continue
+            result.append({
+                "path": item["path"], "name": item["name"], "is_dir": True,
+                "depth": item["depth"], "selected": item["path"] in selected,
+                "expanded": False, "file_count": item.get("file_count", 0),
+            })
+        for files in self._file_cache.values():
+            for f in files:
+                if f["path"] in visible_paths:
+                    result.append({
+                        "path": f["path"], "name": f["name"], "is_dir": False,
+                        "depth": f["depth"], "selected": f["path"] in selected,
+                        "expanded": False, "file_count": 0,
+                    })
+        result.sort(key=lambda x: x["path"])
+        self.data_tree = result
+
+    def toggle_expand(self, path: str) -> None:
+        expanded = set(self._expanded_paths)
+        if path in expanded:
+            expanded = {p for p in expanded if p != path and not p.startswith(path + "/")}
+        else:
+            expanded.add(path)
+            self._load_dir_files(path)
+        self._expanded_paths = list(expanded)
+        if not self.tree_search:
+            self._rebuild_visible_tree()
+
+    def deselect_all(self) -> None:
+        self._selected_paths = []
+        self.data_tree = [{**item, "selected": False} for item in self.data_tree]
+
+    def select_filtered_only(self) -> None:
+        visible_file_paths = {item["path"] for item in self.data_tree if not item["is_dir"]}
+        self._selected_paths = list(visible_file_paths)
+        self.data_tree = [
+            {**item, "selected": item["path"] in visible_file_paths}
+            for item in self.data_tree
+        ]
+
+    def set_tree_item_selected(self, item_path: str, selected: bool) -> None:
+        """Set selection; for dirs, load file JSONs and propagate to all file descendants."""
+        is_dir = any(d["path"] == item_path for d in self._dir_tree)
+        affected: set[str] = {item_path}
+        if is_dir:
+            prefix = item_path + "/"
+            # Collect all descendant dirs
+            desc_dirs = [d["path"] for d in self._dir_tree if d["path"].startswith(prefix)]
+            for dp in [item_path] + desc_dirs:
+                for f in self._load_dir_files(dp):
+                    affected.add(f["path"])
+        current = set(self._selected_paths)
+        if selected:
+            current |= affected
+        else:
+            current -= affected
+        self._selected_paths = list(current)
+        self.data_tree = [
+            {**item, "selected": item["path"] in current}
+            if item["path"] in affected else item
+            for item in self.data_tree
+        ]
+
+    async def list_data_folder(self):
+        import json
+
+        if not self.selected_data_folder:
+            return
+        self.is_loading = True
+        self.error_message = ""
+        self._reset_tree_state()
+        yield
+        try:
+            dirs_file = self._index_base() / "_dirs.json"
+            if not dirs_file.exists():
+                self.error_message = (
+                    f"Kein Index für '{self.selected_data_folder}' vorhanden. "
+                    "Bitte führen Sie 'python index_data.py' im Projektverzeichnis aus."
+                )
+                return
+            with open(dirs_file, encoding="utf-8") as f:
+                self._dir_tree = json.load(f)
+            self._rebuild_visible_tree()
+            if not self._dir_tree:
+                self.error_message = "Index ist leer."
+        except Exception as e:
+            self.error_message = f"Fehler beim Laden des Index: {str(e)}"
+        finally:
+            self.is_loading = False
+
+    async def load_selected_files(self):
+        if not self.selected_data_folder:
+            return
+        self.is_loading = True
+        self.error_message = ""
+        self.xml_files_data = []
+        yield
+        try:
+            folder = _DATA_DIR / self.selected_data_folder
+            selected = set(self._selected_paths)
+            # Ensure all selected dirs have their files loaded
+            for item in self._dir_tree:
+                if item["path"] in selected and item["path"] not in self._file_cache:
+                    self._load_dir_files(item["path"])
+            files_data: list[dict] = []
+            for files in self._file_cache.values():
+                for f in files:
+                    if f["path"] not in selected:
+                        continue
+                    if not f["path"].lower().endswith(".xml"):
+                        continue
+                    rel = Path(f["path"])
+                    subdir = str(rel.parent) if str(rel.parent) != "." else "."
+                    files_data.append({
+                        "subdir": subdir,
+                        "filename": f["name"],
+                        "size_kb": f.get("size_kb", 0.0),
+                    })
+            self.directory_path = str(folder.resolve())
+            self.xml_files_data = files_data
+            if not files_data:
+                self.error_message = "Keine XML-Dateien in der Auswahl gefunden."
+        except Exception as e:
+            self.error_message = f"Fehler: {str(e)}"
+        finally:
+            self.is_loading = False
 
     def _is_valid_xml(self, file_path: Path) -> bool:
         """Check if file starts with XML content (magic bytes)."""
