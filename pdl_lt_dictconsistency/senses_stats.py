@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -231,7 +232,7 @@ def senses_stats_form() -> rx.Component:
 def senses_stats_page() -> rx.Component:
     """Page layout for sense/meaning statistics."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("ANZAHL UND LÄNGE"),
                 no_files_warning(),

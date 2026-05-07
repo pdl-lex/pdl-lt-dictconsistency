@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -387,7 +388,7 @@ def nesting_check() -> rx.Component:
 def nesting_page() -> rx.Component:
     """Page layout for nesting checks."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("VERSCHACHTELUNG"),
                 no_files_warning(),

@@ -6,6 +6,7 @@ from typing import TypedDict
 from .settings import LLMSettingsState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     error_callout,
@@ -644,7 +645,7 @@ def controls_section() -> rx.Component:
 def ocr_query_page() -> rx.Component:
     """Page layout for LLM-based OCR."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("TEXTERKENNUNG (OCR)"),
                 rx.callout(

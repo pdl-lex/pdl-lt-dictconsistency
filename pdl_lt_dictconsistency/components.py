@@ -10,10 +10,10 @@ COLOR_DANGER = "red"
 COLOR_NEUTRAL = "gray"
 
 HEADING_PRIMARY = "var(--accent-12)"
-HEADING_SECTION = "var(--accent-11)"
+HEADING_SECTION = "var(--accent-12)"
 TEXT_MUTED = "gray"
 TEXT_RESULT = "var(--accent-11)"
-COLOR_ACCENT = "var(--accent-9)"
+COLOR_ACCENT = "var(--accent-12)"
 
 PANEL_BG = rx.color("sand", 1, False)
 PANEL_BORDER = "1px solid var(--gray-8)"
@@ -30,7 +30,7 @@ PANEL_PADDING = "20px"
 PANEL_RADIUS = "5px"
 
 # Version
-APP_VERSION = "0.2"
+APP_VERSION = "0.3"
 
 
 # ============ Navigation ============
@@ -215,6 +215,11 @@ def xml_preview_dialog() -> rx.Component:
 
 
 # ============ Reusable Components ============
+
+
+def page_container(*children: rx.Component) -> rx.Component:
+    """Full-width content wrapper replacing rx.container."""
+    return rx.box(*children, width="100%", padding="20px")
 
 
 def page_heading(title: str) -> rx.Component:
@@ -484,6 +489,9 @@ class MobileNavState(rx.State):
         """Close the drawer."""
         self.is_open = False
 
+    def set_is_open(self, value: bool) -> None:
+        self.is_open = value
+
 
 # def mobile_nav_drawer() -> rx.Component:
 #     """Slide-out navigation drawer for small screens."""
@@ -651,9 +659,7 @@ def base_layout(content: rx.Component) -> rx.Component:
                 width="100%",
                 align_items="start",
             ),
-            max_width=MAX_PAGE_WIDTH,
             width="100%",
-            margin_x="auto",
             padding=PANEL_PADDING,
             padding_top="20px",
             spacing="3",

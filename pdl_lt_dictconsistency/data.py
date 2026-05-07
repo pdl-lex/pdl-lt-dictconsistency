@@ -3,6 +3,7 @@ import reflex as rx
 from .state import FileState, MAX_FILE_SIZE
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     error_callout,
@@ -425,7 +426,7 @@ def upload_section() -> rx.Component:
 def data_page() -> rx.Component:
     """Page layout for data import."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("DATEN"),
                 select_data_input_method(),

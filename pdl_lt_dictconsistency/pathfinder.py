@@ -6,6 +6,7 @@ from .state import FileState
 from .processing import CHUNK_SIZE, append, load, clear
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -273,7 +274,7 @@ def pathfinder_input() -> rx.Component:
 def pathfinder_page() -> rx.Component:
     """Page layout for tag/path search."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("TAG- UND PFADSUCHE"),
                 no_files_warning(),

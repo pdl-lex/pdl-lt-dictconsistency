@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -510,7 +511,7 @@ def tag_content_input() -> rx.Component:
 def tag_content_page() -> rx.Component:
     """Page layout for tag content search."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("INHALT & LEERE TAGS"),
                 no_files_warning(),

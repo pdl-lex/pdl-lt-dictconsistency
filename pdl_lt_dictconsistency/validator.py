@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -219,7 +220,7 @@ class ValidatorState(rx.State):
 def validator_page() -> rx.Component:
     """Page layout for XML validation."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("XML-Validator"),
                 no_files_warning(),

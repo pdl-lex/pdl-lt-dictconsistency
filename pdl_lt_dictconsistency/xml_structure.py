@@ -7,6 +7,7 @@ import reflex as rx
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -190,6 +191,7 @@ class StructureAnalysisState(rx.State):
             badges.append({"key": key, "display": filename})
 
         self._total_files = len(file_paths)
+        self._file_paths_json = json.dumps([str(p) for p in file_paths])
 
         # Build analysis with progress updates
         analysis: dict = {}
@@ -275,6 +277,8 @@ class StructureAnalysisState(rx.State):
         self.tree_rows = rows
         yield
 
+        if not self._file_paths_json:
+            return
         file_paths = [Path(p) for p in json.loads(self._file_paths_json)]
 
         from .xml_structure_analysis import find_example
@@ -332,6 +336,8 @@ class StructureAnalysisState(rx.State):
             self.tree_rows = restore_all_files_examples(self.tree_rows)
             return
 
+        if not self._file_paths_json:
+            return
         file_paths = [Path(p) for p in json.loads(self._file_paths_json)]
         matching = [p for p in file_paths if str(p).endswith(file_key)]
         if not matching:
@@ -813,7 +819,7 @@ def _attr_values_modal() -> rx.Component:
 def xml_structure_page() -> rx.Component:
     """Page layout for XML structure analysis."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("STRUKTURANALYSE"),
                 no_files_warning(),

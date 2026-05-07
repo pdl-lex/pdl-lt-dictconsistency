@@ -5,7 +5,7 @@
 
 import reflex as rx
 
-from .components import base_layout, page_heading
+from .components import base_layout, page_container, page_heading
 
 
 # ============ Start Page ============
@@ -14,7 +14,7 @@ from .components import base_layout, page_heading
 def index() -> rx.Component:
     """Landing page with app description and usage steps."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("START"),
                 rx.text(
@@ -31,7 +31,7 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Verzeichnis angeben oder XML/ZIP-Dateien hochladen."
+                            rx.data_list.value("Daten aus Verzeichnis laden, XML/ZIP-Dateien hochladen, oder ausgewählte Wörterbücher laden."
 
                             ),
                         ),
@@ -42,7 +42,18 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Prüfung auf XML-Wohlgeformtheit und TEI-Lex 0 Konformität"
+                            rx.data_list.value("Prüfung auf XML-Wohlgeformtheit und TEI-Lex 0 Konformität."
+
+                            ),
+                        ),
+                        rx.data_list.item(
+                            rx.data_list.label(
+                                rx.badge(
+                                    "Strukturanalyse",
+                                    variant="soft",
+                                )
+                                ),
+                            rx.data_list.value("Analysiert den XML-Baum aller hochgeladenen Dateien, zeigt Attribute und Werte an, und erlaubt die Projektion einzelner Dateien in den gesamten Baum."
 
                             ),
                         ),
@@ -53,7 +64,7 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Suche nach bestimmten Tags oder Pfaden im XML-Baum, inklusive Wildcards"
+                            rx.data_list.value("Suche nach bestimmten Tags oder Pfaden im XML-Baum, inklusive Wildcards."
 
                             ),
                         ),
@@ -64,7 +75,7 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Suche nach Textinhalten, leeren Tags und Umbrüchen"
+                            rx.data_list.value("Suche nach Textinhalten, leeren Tags und Umbrüchen."
 
                             ),
                         ),
@@ -75,7 +86,29 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Prüft, ob Tags oder Attribute mehrfach vorkommen"
+                            rx.data_list.value("Prüft, ob Tags oder Attribute mehrfach vorkommen."
+
+                            ),
+                        ),
+                        rx.data_list.item(
+                            rx.data_list.label(
+                                rx.badge(
+                                    "Einmaligkeit",
+                                    variant="soft",
+                                )
+                                ),
+                            rx.data_list.value("Analyisert Verschachtelung und Verschachtelungstiefe."
+
+                            ),
+                        ),
+                        rx.data_list.item(
+                            rx.data_list.label(
+                                rx.badge(
+                                    "Anzahl und Länge",
+                                    variant="soft",
+                                )
+                                ),
+                            rx.data_list.value("Bedeutungsangaben können hinsichtlich ihrer Anzahl, sowie minimaler und maximaler Länge ausgewertet werden."
 
                             ),
                         ),
@@ -138,8 +171,10 @@ _register_pages()
 
 app = rx.App(
     theme=rx.theme(
-    accent_color="gray",
-    gray_color="sand",
+    accent_color="jade",
+    # gray_color="sand",
+    has_background=True,
+    radius="large",
     appearance="light",
     )
 )
