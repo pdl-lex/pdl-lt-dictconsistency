@@ -18,6 +18,9 @@ pdl_lt_dictconsistency_Backup*/
 llm-ip.txt
 
 data/
+index/
+
+datasources.json
 
 CLAUDE.md
 .claude/

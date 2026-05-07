@@ -1,0 +1,6 @@
+[
+  {"path": "data/bdo", "name": "Bayerisches Wörterbuch"},
+  {"path": "../../../Wörterbuchdaten/bdo/wbf", "name": "Fränkisches Wörterbuch"},
+  {"path": "~/wb/bdo/bwb", "name": "BWB lokal"},
+  {"path": "C:\\Daten\\WB\\dwds", "name": "DWDS"}
+]

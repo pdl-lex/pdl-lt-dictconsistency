@@ -86,7 +86,7 @@ def existing_data_section() -> rx.Component:
     """Section for 'Vorliegende Daten' mode: folder picker + file tree."""
     return rx.vstack(
         section_heading("Vorliegende Daten"),
-        rx.text("Wählen Sie einen Ordner aus dem 'data'-Verzeichnis:"),
+        rx.text("Wählen Sie eine Datenquelle aus (konfiguriert in datasources.json):"),
         rx.hstack(
             rx.select(
                 FileState.data_folders,
@@ -208,7 +208,7 @@ def select_data_input_method() -> rx.Component:
             rx.text(
                 "'Verzeichnispfad' durchsucht ein Verzeichnis (geeignet bei lokaler Installation). "
                 "'Datei-Upload' lädt XML-Dateien oder ZIP-Archive hoch. "
-                "'Vorliegende Daten' wählt aus Ordnern im server-seitigen 'data'-Verzeichnis.",
+                "'Vorliegende Daten' wählt aus konfigurierten Datenquellen (datasources.json).",
                 color="gray",
                 style={"font_style": "italic"},
             ),

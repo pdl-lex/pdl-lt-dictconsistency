@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Scan data/ subfolders and write split index files.
+"""Index configured data sources and write split index files.
 
-Output per subfolder (e.g. bdo):
-  data/.tree/bdo/_dirs.json          — all directories with XML file counts
-  data/.tree/bdo/bwb/A.json          — files directly in bwb/A/
-  data/.tree/bdo/bwb/B.json          — files directly in bwb/B/
+Data sources are configured in datasources.json at the project root.
+Copy datasources.example.json → datasources.json and adapt paths.
+
+Output per source (key derived from name):
+  index/<key>/_dirs.json       — all directories with XML file counts
+  index/<key>/subdir/A.json    — files directly in subdir/A/
   ...
 
 Run once (or after data changes):
@@ -14,8 +16,7 @@ import json
 import os
 from pathlib import Path
 
-DATA_DIR = Path("data")
-INDEX_DIR = DATA_DIR / ".tree"
+from pdl_lt_dictconsistency.datasources_config import INDEX_DIR, load_datasources
 
 
 def _write_json(obj: list, path: Path) -> None:
@@ -46,7 +47,6 @@ def build(root: Path, current: Path, index_base: Path) -> tuple[list[dict], int]
     rel = current.relative_to(root)
     depth = len(rel.parts) - 1  # root itself → -1 (not written); its children → 0
 
-    # Write file JSON for this directory (if it has direct files)
     xml_count_here = 0
     if files:
         file_items = []
@@ -72,7 +72,6 @@ def build(root: Path, current: Path, index_base: Path) -> tuple[list[dict], int]
                 out = out / part
             _write_json(file_items, out / f"{rel.name}.json")
 
-    # Recurse into subdirs
     dir_entries: list[dict] = []
     xml_count_total = xml_count_here
     for entry in subdirs:
@@ -93,22 +92,29 @@ def build(root: Path, current: Path, index_base: Path) -> tuple[list[dict], int]
 
 
 def main() -> None:
-    if not DATA_DIR.exists():
-        print(f"Fehler: Verzeichnis '{DATA_DIR}' nicht gefunden.")
+    sources = load_datasources()
+    if not sources:
+        print(
+            "Keine Datenquellen konfiguriert.\n"
+            "Kopieren Sie datasources.example.json → datasources.json "
+            "und passen Sie die Pfade an."
+        )
         return
     INDEX_DIR.mkdir(exist_ok=True)
-    subfolders = sorted(
-        d for d in DATA_DIR.iterdir()
-        if d.is_dir() and d.name != ".tree"
-    )
-    if not subfolders:
-        print("Keine Unterordner in data/ gefunden.")
-        return
-    for subfolder in subfolders:
-        print(f"Indexiere {subfolder.name} ...", end=" ", flush=True)
-        index_base = INDEX_DIR / subfolder.name
+    for source in sources:
+        name = source["name"]
+        key = source["key"]
+        path = Path(source["path"])
+        print(f"Indexiere '{name}' ({path}) ...", end=" ", flush=True)
+        if not path.exists():
+            print(f"FEHLER: Pfad nicht gefunden: {path}")
+            continue
+        if not path.is_dir():
+            print(f"FEHLER: Kein Verzeichnis: {path}")
+            continue
+        index_base = INDEX_DIR / key
         index_base.mkdir(exist_ok=True)
-        dir_entries, xml_total = build(subfolder, subfolder, index_base)
+        dir_entries, xml_total = build(path, path, index_base)
         _write_json(dir_entries, index_base / "_dirs.json")
         print(f"{xml_total:,} XML-Dateien, {len(dir_entries)} Ordner")
     print("Fertig.")

@@ -1,11 +1,11 @@
 import reflex as rx
 from pathlib import Path
 
+from .datasources_config import INDEX_DIR, load_datasources
+
 # Security limits
 MAX_ZIP_EXTRACT_SIZE = 100 * 1024 * 1024  # 100 MB
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB per file
-
-_DATA_DIR = Path(__file__).parent.parent / "data"
 
 
 class FileState(rx.State):
@@ -25,6 +25,7 @@ class FileState(rx.State):
     data_tree: list[dict] = []
     tree_search: str = ""
     # Backend-only: never serialized to client
+    _datasources: list[dict] = []        # loaded from datasources.json
     _dir_tree: list[dict] = []           # dirs from _dirs.json (tiny)
     _file_cache: dict[str, list] = {}    # dir_path → file items (lazy loaded)
     _selected_paths: list[str] = []
@@ -60,15 +61,15 @@ class FileState(rx.State):
     # ---- "Vorliegende Daten" helpers ----
 
     def _refresh_data_folders(self) -> None:
-        if _DATA_DIR.exists():
-            self.data_folders = sorted(
-                d.name for d in _DATA_DIR.iterdir()
-                if d.is_dir() and d.name != ".tree"
-            )
-        else:
-            self.data_folders = []
+        self._datasources = load_datasources()
+        self.data_folders = [s["name"] for s in self._datasources]
         self.selected_data_folder = ""
         self._reset_tree_state()
+
+    def _get_source(self, name: str) -> dict | None:
+        if not self._datasources:
+            self._datasources = load_datasources()
+        return next((s for s in self._datasources if s["name"] == name), None)
 
     def _reset_tree_state(self) -> None:
         self.data_tree = []
@@ -85,7 +86,10 @@ class FileState(rx.State):
     # ---- index helpers ----
 
     def _index_base(self) -> Path:
-        return _DATA_DIR / ".tree" / self.selected_data_folder
+        src = self._get_source(self.selected_data_folder)
+        if src is None:
+            return INDEX_DIR / self.selected_data_folder
+        return INDEX_DIR / src["key"]
 
     def _file_json_path(self, dir_path: str) -> Path:
         """Return the path to the per-dir file JSON."""
@@ -281,7 +285,11 @@ class FileState(rx.State):
         self.xml_files_data = []
         yield
         try:
-            folder = _DATA_DIR / self.selected_data_folder
+            src = self._get_source(self.selected_data_folder)
+            if src is None:
+                self.error_message = "Datenquelle nicht gefunden."
+                return
+            folder = Path(src["path"])
             selected = set(self._selected_paths)
             # Ensure all selected dirs have their files loaded
             for item in self._dir_tree:
@@ -301,7 +309,7 @@ class FileState(rx.State):
                         "filename": f["name"],
                         "size_kb": f.get("size_kb", 0.0),
                     })
-            self.directory_path = str(folder.resolve())
+            self.directory_path = str(folder)
             self.xml_files_data = files_data
             if not files_data:
                 self.error_message = "Keine XML-Dateien in der Auswahl gefunden."
