@@ -639,7 +639,7 @@ def base_layout(content: rx.Component) -> rx.Component:
                     spacing="3",
                 ),
                 padding="10px",
-                background_color=COLOR_ACCENT,
+                background_color=rx.color_mode_cond("var(--accent-12)", "var(--accent-3)"),
                 color="white",
                 width="100%",
                 border_radius="4px",
