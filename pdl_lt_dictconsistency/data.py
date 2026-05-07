@@ -157,6 +157,12 @@ def existing_data_section() -> rx.Component:
                         rx.box(),
                     ),
                     rx.button(
+                        "Alles auswählen",
+                        on_click=FileState.select_all,
+                        variant="outline",
+                        disabled=FileState.is_loading,
+                    ),
+                    rx.button(
                         "Auswahl entfernen",
                         on_click=FileState.deselect_all,
                         variant="ghost",

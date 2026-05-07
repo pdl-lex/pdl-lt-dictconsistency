@@ -215,6 +215,15 @@ class FileState(rx.State):
         if not self.tree_search:
             self._rebuild_visible_tree()
 
+    def select_all(self) -> None:
+        self._load_all_file_caches()
+        all_paths: set[str] = {item["path"] for item in self._dir_tree}
+        for files in self._file_cache.values():
+            for f in files:
+                all_paths.add(f["path"])
+        self._selected_paths = list(all_paths)
+        self.data_tree = [{**item, "selected": True} for item in self.data_tree]
+
     def deselect_all(self) -> None:
         self._selected_paths = []
         self.data_tree = [{**item, "selected": False} for item in self.data_tree]
