@@ -133,8 +133,8 @@ def index() -> rx.Component:
 
 # ============ Page Registry ============
 
-# Map routes to page functions (index is registered separately)
-PAGES: dict[str, callable] = {}
+# Map routes to (page_function, page_title)
+PAGES: dict[str, tuple[callable, str]] = {}
 
 
 def _register_pages() -> None:
@@ -151,21 +151,22 @@ def _register_pages() -> None:
     from .ocr_query import ocr_query_page
     from .xml_structure import xml_structure_page
 
-    PAGES["/data"] = data_page
-    PAGES["/validator"] = validator_page
-    PAGES["/pathfinder"] = pathfinder_page
-    PAGES["/tag-content"] = tag_content_page
-    PAGES["/uniqueness"] = uniqueness_page
-    PAGES["/nesting"] = nesting_page
-    PAGES["/senses-stats"] = senses_stats_page
-    PAGES["/settings"] = settings_page
-    PAGES["/llm-query"] = llm_query_page
-    PAGES["/ocr-query"] = ocr_query_page
-    PAGES["/xml-structure"] = xml_structure_page
+    PAGES["/data"] = (data_page, "Daten")
+    PAGES["/validator"] = (validator_page, "XML-Validator")
+    PAGES["/pathfinder"] = (pathfinder_page, "Tag- und Pfadsuche")
+    PAGES["/tag-content"] = (tag_content_page, "Inhalt / Leere Tags")
+    PAGES["/uniqueness"] = (uniqueness_page, "Einmaligkeit")
+    PAGES["/nesting"] = (nesting_page, "Verschachtelung")
+    PAGES["/senses-stats"] = (senses_stats_page, "Anzahl und Länge")
+    PAGES["/settings"] = (settings_page, "LLM-Einstellungen")
+    PAGES["/llm-query"] = (llm_query_page, "LLM-Anfrage")
+    PAGES["/ocr-query"] = (ocr_query_page, "Texterkennung (OCR)")
+    PAGES["/xml-structure"] = (xml_structure_page, "Strukturanalyse")
 
 
 _register_pages()
 
+_APP_TITLE = "LT Wörterbuch-Konsistenzprüfung"
 
 # ============ App ============
 
@@ -178,10 +179,6 @@ app = rx.App(
     appearance="light",
     )
 )
-app.add_page(index)
-for route, page_fn in PAGES.items():
-    app.add_page(page_fn, route=route)
-
-
-
-# app.add_page(index, route="/", title="LT Sachgruppen-Vorhersage | Start")
+app.add_page(index, title=f"Start | {_APP_TITLE}")
+for route, (page_fn, page_title) in PAGES.items():
+    app.add_page(page_fn, route=route, title=f"{page_title} | {_APP_TITLE}")
