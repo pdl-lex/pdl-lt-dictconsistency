@@ -122,6 +122,10 @@ class PathfinderState(rx.State):
             return
 
         base_path = Path(file_state.directory_path).expanduser()
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_searching = False
+            return
         results: list[dict] = []
 
         for file_info in file_state.xml_files_data:

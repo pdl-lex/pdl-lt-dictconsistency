@@ -127,6 +127,10 @@ class ValidatorState(rx.State):
 
         self._total_files = len(file_state.xml_files_data)
         base_path = Path(file_state.directory_path).expanduser()
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_validating = False
+            return
         wellformed_errors: list[dict] = []
         schema_errors: list[dict] = []
 

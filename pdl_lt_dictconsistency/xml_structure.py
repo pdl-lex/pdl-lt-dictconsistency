@@ -174,6 +174,10 @@ class StructureAnalysisState(rx.State):
         from .xml_structure_analysis import flatten_to_rows, apply_default_collapse, _traverse
 
         base_path = Path(file_state.directory_path).expanduser()
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_analyzing = False
+            return
         file_paths: list[Path] = []
         badges: list[dict] = []
 

@@ -127,6 +127,10 @@ class TagContentState(rx.State):
             return
 
         base_path = Path(file_state.directory_path).expanduser()
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_loading_tags = False
+            return
         tags_set: set[str] = set()
 
         for file_info in file_state.xml_files_data:
@@ -208,6 +212,10 @@ class TagContentState(rx.State):
             tags_to_search = self.included_tags
 
         base_path = Path(file_state.directory_path).expanduser()
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_searching = False
+            return
         results: list[dict] = []
         tag_found_in_documents = False
 
