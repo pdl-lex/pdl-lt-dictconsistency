@@ -190,11 +190,11 @@ class StructureAnalysisState(rx.State):
             badges.append({"key": key, "display": filename})
 
         self._total_files = len(file_paths)
-        self._file_paths_json = json.dumps([str(p) for p in file_paths])
 
         # Build analysis with progress updates
         analysis: dict = {}
         from lxml import etree
+        from .processing import CHUNK_SIZE
         parser = etree.XMLParser(
             dtd_validation=False,
             load_dtd=False,
@@ -202,17 +202,16 @@ class StructureAnalysisState(rx.State):
             resolve_entities=False,
         )
 
-        for i, fp in enumerate(file_paths):
-            try:
-                with open(fp, "rb") as f:
-                    doc = etree.parse(f, parser)
-                _traverse(doc.getroot(), analysis, ())
-            except Exception as e:
-                print(f"xml_structure: analyze_all error in {fp}: {e}")
-
-            self.files_analyzed = i + 1
-            if (i + 1) % 5 == 0:
-                yield
+        for chunk_start in range(0, len(file_paths), CHUNK_SIZE):
+            for fp in file_paths[chunk_start : chunk_start + CHUNK_SIZE]:
+                try:
+                    with open(fp, "rb") as f:
+                        doc = etree.parse(f, parser)
+                    _traverse(doc.getroot(), analysis, ())
+                except Exception as e:
+                    print(f"xml_structure: analyze_all error in {fp}: {e}")
+                self.files_analyzed += 1
+            yield
 
         # Flatten and apply default collapse (depth >= 1 collapsed)
         rows = flatten_to_rows(analysis)
