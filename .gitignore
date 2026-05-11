@@ -24,3 +24,5 @@ datasources.json
 
 CLAUDE.md
 .claude/
+
+.python-version
