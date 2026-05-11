@@ -7,6 +7,7 @@ import reflex as rx
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -174,6 +175,10 @@ class StructureAnalysisState(rx.State):
         from .xml_structure_analysis import flatten_to_rows, apply_default_collapse, _traverse
 
         base_path = Path(file_state.directory_path).expanduser()
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_analyzing = False
+            return
         file_paths: list[Path] = []
         badges: list[dict] = []
 
@@ -191,6 +196,7 @@ class StructureAnalysisState(rx.State):
         # Build analysis with progress updates
         analysis: dict = {}
         from lxml import etree
+        from .processing import CHUNK_SIZE
         parser = etree.XMLParser(
             dtd_validation=False,
             load_dtd=False,
@@ -198,17 +204,16 @@ class StructureAnalysisState(rx.State):
             resolve_entities=False,
         )
 
-        for i, fp in enumerate(file_paths):
-            try:
-                with open(fp, "rb") as f:
-                    doc = etree.parse(f, parser)
-                _traverse(doc.getroot(), analysis, ())
-            except Exception as e:
-                print(f"xml_structure: analyze_all error in {fp}: {e}")
-
-            self.files_analyzed = i + 1
-            if (i + 1) % 5 == 0:
-                yield
+        for chunk_start in range(0, len(file_paths), CHUNK_SIZE):
+            for fp in file_paths[chunk_start : chunk_start + CHUNK_SIZE]:
+                try:
+                    with open(fp, "rb") as f:
+                        doc = etree.parse(f, parser)
+                    _traverse(doc.getroot(), analysis, ())
+                except Exception as e:
+                    print(f"xml_structure: analyze_all error in {fp}: {e}")
+                self.files_analyzed += 1
+            yield
 
         # Flatten and apply default collapse (depth >= 1 collapsed)
         rows = flatten_to_rows(analysis)
@@ -272,6 +277,8 @@ class StructureAnalysisState(rx.State):
         self.tree_rows = rows
         yield
 
+        if not self._file_paths_json:
+            return
         file_paths = [Path(p) for p in json.loads(self._file_paths_json)]
 
         from .xml_structure_analysis import find_example
@@ -329,6 +336,8 @@ class StructureAnalysisState(rx.State):
             self.tree_rows = restore_all_files_examples(self.tree_rows)
             return
 
+        if not self._file_paths_json:
+            return
         file_paths = [Path(p) for p in json.loads(self._file_paths_json)]
         matching = [p for p in file_paths if str(p).endswith(file_key)]
         if not matching:
@@ -810,7 +819,7 @@ def _attr_values_modal() -> rx.Component:
 def xml_structure_page() -> rx.Component:
     """Page layout for XML structure analysis."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("STRUKTURANALYSE"),
                 no_files_warning(),

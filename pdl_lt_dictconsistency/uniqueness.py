@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -126,106 +127,109 @@ class UniquenessState(rx.State):
                 return
 
         base_path = Path(file_state.directory_path).expanduser()
-        results: list[dict] = []
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_checking = False
+            return
 
-        for file_info in file_state.xml_files_data:
-            subdir = file_info["subdir"]
-            filename = file_info["filename"]
+        from .processing import CHUNK_SIZE, append, load, clear
+        token = self.router.session.client_token
+        clear(token, "uniqueness")
+        parser = etree.XMLParser(dtd_validation=False, load_dtd=False, no_network=True, resolve_entities=False)
+        all_files = list(file_state.xml_files_data)
 
-            if subdir == ".":
-                file_path = base_path / filename
-            else:
-                file_path = base_path / subdir / filename
+        for chunk_start in range(0, len(all_files), CHUNK_SIZE):
+            chunk = all_files[chunk_start : chunk_start + CHUNK_SIZE]
+            chunk_results: list[dict] = []
 
-            self.files_checked += 1
+            for file_info in chunk:
+                subdir = file_info["subdir"]
+                filename = file_info["filename"]
+                file_path = base_path / filename if subdir == "." else base_path / subdir / filename
+                self.files_checked += 1
 
-            try:
-                parser = etree.XMLParser(
-                    dtd_validation=False, load_dtd=False,
-                    no_network=True, resolve_entities=False,
-                )
-                with open(file_path, "rb") as f:
-                    doc = etree.parse(f, parser)
+                try:
+                    with open(file_path, "rb") as f:
+                        doc = etree.parse(f, parser)
 
-                if self.check_mode == "Tag":
-                    xpath = f"//*[local-name()='{self.tag_name.strip()}']"
-                    elements = doc.xpath(xpath)
-                    if len(elements) > 1:
-                        first_line = elements[0].sourceline or 0
-                        results.append({
-                            "subdir": subdir, "filename": filename, "line": first_line,
-                            "error_type": f"Tag '{self.tag_name.strip()}' kommt {len(elements)}x vor",
-                            "details": f"Erwartet: 1x, Gefunden: {len(elements)}x",
-                        })
-
-                elif self.check_mode == "Tag-Inhalt":
-                    xpath = f"//*[local-name()='{self.tag_name.strip()}']"
-                    elements = doc.xpath(xpath)
-                    content_map: dict[str, list[int]] = {}
-                    for elem in elements:
-                        content = (elem.text or "").strip()
-                        if content:
-                            line = elem.sourceline or 0
-                            if content not in content_map:
-                                content_map[content] = []
-                            content_map[content].append(line)
-                    for content, lines in content_map.items():
-                        if len(lines) > 1:
-                            preview_text = content if len(content) <= 50 else content[:50] + "..."
-                            results.append({
-                                "subdir": subdir, "filename": filename, "line": lines[0],
-                                "error_type": f"Inhalt '{preview_text}' in Tag '{self.tag_name.strip()}' kommt {len(lines)}x vor",
-                                "details": f"Zeilen: {', '.join(map(str, lines))}",
+                    if self.check_mode == "Tag":
+                        xpath = f"//*[local-name()='{self.tag_name.strip()}']"
+                        elements = doc.xpath(xpath)
+                        if len(elements) > 1:
+                            first_line = elements[0].sourceline or 0
+                            chunk_results.append({
+                                "subdir": subdir, "filename": filename, "line": first_line,
+                                "error_type": f"Tag '{self.tag_name.strip()}' kommt {len(elements)}x vor",
+                                "details": f"Erwartet: 1x, Gefunden: {len(elements)}x",
                             })
 
-                elif self.check_mode == "Tag & Attribut":
-                    xpath = f"//*[local-name()='{self.tag_name.strip()}']"
-                    elements = doc.xpath(xpath)
-                    attr_map: dict[str, list[int]] = {}
-                    for elem in elements:
-                        attr_value = self._get_attribute_value(elem, self.attribute_name.strip())
-                        if attr_value:
-                            line = elem.sourceline or 0
-                            if attr_value not in attr_map:
-                                attr_map[attr_value] = []
-                            attr_map[attr_value].append(line)
-                    for attr_value, lines in attr_map.items():
-                        if len(lines) > 1:
-                            results.append({
-                                "subdir": subdir, "filename": filename, "line": lines[0],
-                                "error_type": f"Attribut '{self.attribute_name.strip()}' mit Wert '{attr_value}' in Tag '{self.tag_name.strip()}' kommt {len(lines)}x vor",
-                                "details": f"Zeilen: {', '.join(map(str, lines))}",
-                            })
+                    elif self.check_mode == "Tag-Inhalt":
+                        xpath = f"//*[local-name()='{self.tag_name.strip()}']"
+                        elements = doc.xpath(xpath)
+                        content_map: dict[str, list[int]] = {}
+                        for elem in elements:
+                            content = (elem.text or "").strip()
+                            if content:
+                                line = elem.sourceline or 0
+                                if content not in content_map:
+                                    content_map[content] = []
+                                content_map[content].append(line)
+                        for content, lines in content_map.items():
+                            if len(lines) > 1:
+                                preview_text = content if len(content) <= 50 else content[:50] + "..."
+                                chunk_results.append({
+                                    "subdir": subdir, "filename": filename, "line": lines[0],
+                                    "error_type": f"Inhalt '{preview_text}' in Tag '{self.tag_name.strip()}' kommt {len(lines)}x vor",
+                                    "details": f"Zeilen: {', '.join(map(str, lines))}",
+                                })
 
-                elif self.check_mode == "Attribut":
-                    all_elements = doc.xpath("//*")
-                    attr_map_full: dict[str, list[tuple[str, int]]] = {}
-                    for elem in all_elements:
-                        attr_value = self._get_attribute_value(elem, self.attribute_name.strip())
-                        if attr_value:
-                            line = elem.sourceline or 0
-                            tag_name = etree.QName(elem).localname
-                            if attr_value not in attr_map_full:
-                                attr_map_full[attr_value] = []
-                            attr_map_full[attr_value].append((tag_name, line))
-                    for attr_value, occurrences in attr_map_full.items():
-                        if len(occurrences) > 1:
-                            tag_list = ", ".join([f"{tag}:{line}" for tag, line in occurrences])
-                            results.append({
-                                "subdir": subdir, "filename": filename, "line": occurrences[0][1],
-                                "error_type": f"Attribut '{self.attribute_name.strip()}' mit Wert '{attr_value}' kommt {len(occurrences)}x vor",
-                                "details": f"In: {tag_list}",
-                            })
+                    elif self.check_mode == "Tag & Attribut":
+                        xpath = f"//*[local-name()='{self.tag_name.strip()}']"
+                        elements = doc.xpath(xpath)
+                        attr_map: dict[str, list[int]] = {}
+                        for elem in elements:
+                            attr_value = self._get_attribute_value(elem, self.attribute_name.strip())
+                            if attr_value:
+                                line = elem.sourceline or 0
+                                if attr_value not in attr_map:
+                                    attr_map[attr_value] = []
+                                attr_map[attr_value].append(line)
+                        for attr_value, lines in attr_map.items():
+                            if len(lines) > 1:
+                                chunk_results.append({
+                                    "subdir": subdir, "filename": filename, "line": lines[0],
+                                    "error_type": f"Attribut '{self.attribute_name.strip()}' mit Wert '{attr_value}' in Tag '{self.tag_name.strip()}' kommt {len(lines)}x vor",
+                                    "details": f"Zeilen: {', '.join(map(str, lines))}",
+                                })
 
-            except Exception as e:
-                print(f"Error in {filename}: {e}")
-                continue
+                    elif self.check_mode == "Attribut":
+                        all_elements = doc.xpath("//*")
+                        attr_map_full: dict[str, list[tuple[str, int]]] = {}
+                        for elem in all_elements:
+                            attr_value = self._get_attribute_value(elem, self.attribute_name.strip())
+                            if attr_value:
+                                line = elem.sourceline or 0
+                                tag_name = etree.QName(elem).localname
+                                if attr_value not in attr_map_full:
+                                    attr_map_full[attr_value] = []
+                                attr_map_full[attr_value].append((tag_name, line))
+                        for attr_value, occurrences in attr_map_full.items():
+                            if len(occurrences) > 1:
+                                tag_list = ", ".join([f"{tag}:{line}" for tag, line in occurrences])
+                                chunk_results.append({
+                                    "subdir": subdir, "filename": filename, "line": occurrences[0][1],
+                                    "error_type": f"Attribut '{self.attribute_name.strip()}' mit Wert '{attr_value}' kommt {len(occurrences)}x vor",
+                                    "details": f"In: {tag_list}",
+                                })
 
-            if self.files_checked % 10 == 0:
-                self.uniqueness_results = results.copy()
-                yield
+                except Exception as e:
+                    print(f"Error in {filename}: {e}")
+                    continue
 
-        self.uniqueness_results = results
+            append(token, "uniqueness", chunk_results)
+            yield
+
+        self.uniqueness_results = load(token, "uniqueness")
         self.is_checking = False
 
 
@@ -334,7 +338,7 @@ def uniqueness_check() -> rx.Component:
 def uniqueness_page() -> rx.Component:
     """Page layout for uniqueness checks."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("EINMALIGKEIT"),
                 no_files_warning(),

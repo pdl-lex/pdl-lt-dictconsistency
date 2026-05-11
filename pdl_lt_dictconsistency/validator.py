@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -127,8 +128,14 @@ class ValidatorState(rx.State):
 
         self._total_files = len(file_state.xml_files_data)
         base_path = Path(file_state.directory_path).expanduser()
-        wellformed_errors: list[dict] = []
-        schema_errors: list[dict] = []
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_validating = False
+            return
+        from .processing import CHUNK_SIZE, append, load, clear
+        token = self.router.session.client_token
+        clear(token, "wellformed")
+        clear(token, "schema")
 
         # Load schema if TEI-Lex 0 validation
         rng_schema = None
@@ -145,66 +152,63 @@ class ValidatorState(rx.State):
                 self.is_validating = False
                 return
 
-        for file_info in file_state.xml_files_data:
-            subdir = file_info["subdir"]
-            filename = file_info["filename"]
+        all_files = list(file_state.xml_files_data)
 
-            if subdir == ".":
-                file_path = base_path / filename
-            else:
-                file_path = base_path / subdir / filename
+        for chunk_start in range(0, len(all_files), CHUNK_SIZE):
+            chunk = all_files[chunk_start : chunk_start + CHUNK_SIZE]
+            chunk_wf: list[dict] = []
+            chunk_sc: list[dict] = []
 
-            self.files_checked += 1
-            has_wellformed_error = False
-            has_schema_error = False
+            for file_info in chunk:
+                subdir = file_info["subdir"]
+                filename = file_info["filename"]
+                file_path = base_path / filename if subdir == "." else base_path / subdir / filename
+                self.files_checked += 1
+                has_wellformed_error = False
+                has_schema_error = False
 
-            try:
-                with open(file_path, "rb") as f:
-                    doc = etree.parse(f)
+                try:
+                    with open(file_path, "rb") as f:
+                        doc = etree.parse(f)
+                    if rng_schema is not None:
+                        if not rng_schema.validate(doc):
+                            has_schema_error = True
+                            for error in rng_schema.error_log:
+                                chunk_sc.append({
+                                    "subdir": subdir, "filename": filename,
+                                    "line": error.line if error.line else 0,
+                                    "column": error.column if error.column else 0,
+                                    "error": error.message,
+                                })
+                except etree.XMLSyntaxError as e:
+                    has_wellformed_error = True
+                    chunk_wf.append({
+                        "subdir": subdir, "filename": filename,
+                        "line": e.lineno if e.lineno else 0,
+                        "column": e.offset if e.offset else 0,
+                        "error": str(e.msg) if e.msg else str(e),
+                    })
+                except Exception as e:
+                    has_wellformed_error = True
+                    chunk_wf.append({
+                        "subdir": subdir, "filename": filename,
+                        "line": 0, "column": 0, "error": str(e),
+                    })
 
-                if rng_schema is not None:
-                    if not rng_schema.validate(doc):
-                        has_schema_error = True
-                        for error in rng_schema.error_log:
-                            schema_errors.append({
-                                "subdir": subdir, "filename": filename,
-                                "line": error.line if error.line else 0,
-                                "column": error.column if error.column else 0,
-                                "error": error.message,
-                            })
+                if has_wellformed_error:
+                    self.files_with_wellformed_errors += 1
+                if has_schema_error:
+                    self.files_with_schema_errors += 1
 
-            except etree.XMLSyntaxError as e:
-                has_wellformed_error = True
-                wellformed_errors.append({
-                    "subdir": subdir, "filename": filename,
-                    "line": e.lineno if e.lineno else 0,
-                    "column": e.offset if e.offset else 0,
-                    "error": str(e.msg) if e.msg else str(e),
-                })
-            except Exception as e:
-                has_wellformed_error = True
-                wellformed_errors.append({
-                    "subdir": subdir, "filename": filename,
-                    "line": 0, "column": 0, "error": str(e),
-                })
-
-            if has_wellformed_error:
-                self.files_with_wellformed_errors += 1
-            if has_schema_error:
-                self.files_with_schema_errors += 1
-
-            if self.files_checked % 100 == 0:
-                if self.validation_type == "Wohlgeformtheit (Well-formed XML)":
-                    self.wellformed_errors = wellformed_errors.copy()
-                else:
-                    self.schema_errors = schema_errors.copy()
-                yield
+            append(token, "wellformed", chunk_wf)
+            append(token, "schema", chunk_sc)
+            yield
 
         if self.validation_type == "Wohlgeformtheit (Well-formed XML)":
-            self.wellformed_errors = wellformed_errors
+            self.wellformed_errors = load(token, "wellformed")
             self.wellformed_validation_complete = True
         else:
-            self.schema_errors = schema_errors
+            self.schema_errors = load(token, "schema")
             self.schema_validation_complete = True
 
         self.is_validating = False
@@ -216,7 +220,7 @@ class ValidatorState(rx.State):
 def validator_page() -> rx.Component:
     """Page layout for XML validation."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("XML-Validator"),
                 no_files_warning(),

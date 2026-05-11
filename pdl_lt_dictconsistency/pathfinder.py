@@ -3,8 +3,10 @@ from pathlib import Path
 from lxml import etree
 
 from .state import FileState
+from .processing import CHUNK_SIZE, append, load, clear
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -122,59 +124,54 @@ class PathfinderState(rx.State):
             return
 
         base_path = Path(file_state.directory_path).expanduser()
-        results: list[dict] = []
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_searching = False
+            return
 
-        for file_info in file_state.xml_files_data:
-            subdir = file_info["subdir"]
-            filename = file_info["filename"]
+        token = self.router.session.client_token
+        clear(token, "pathfinder")
+        xpath = self._build_xpath(search_params)
+        all_files = list(file_state.xml_files_data)
 
-            if subdir == ".":
-                file_path = base_path / filename
-            else:
-                file_path = base_path / subdir / filename
+        for chunk_start in range(0, len(all_files), CHUNK_SIZE):
+            chunk = all_files[chunk_start : chunk_start + CHUNK_SIZE]
+            chunk_results: list[dict] = []
 
-            self.files_checked += 1
+            for file_info in chunk:
+                subdir = file_info["subdir"]
+                filename = file_info["filename"]
+                file_path = base_path / filename if subdir == "." else base_path / subdir / filename
+                self.files_checked += 1
 
-            try:
-                with open(file_path, "rb") as f:
-                    doc = etree.parse(f)
-
-                xpath = self._build_xpath(search_params)
-                elements = doc.xpath(xpath)
-
-                for elem in elements:
-                    # Build full path by walking up from element to root
-                    path_parts: list[str] = []
-                    current = elem
-                    while current is not None:
-                        path_parts.insert(0, etree.QName(current).localname)
-                        current = current.getparent()
-                    full_path = "/".join(path_parts)
-
-                    text_content = (elem.text or "").strip()
-                    if len(text_content) > 100:
-                        text_content = text_content[:100] + "..."
-
-                    results.append(
-                        {
+                try:
+                    with open(file_path, "rb") as f:
+                        doc = etree.parse(f)
+                    for elem in doc.xpath(xpath):
+                        path_parts: list[str] = []
+                        current = elem
+                        while current is not None:
+                            path_parts.insert(0, etree.QName(current).localname)
+                            current = current.getparent()
+                        text_content = (elem.text or "").strip()
+                        if len(text_content) > 100:
+                            text_content = text_content[:100] + "..."
+                        chunk_results.append({
                             "subdir": subdir,
                             "filename": filename,
                             "line": elem.sourceline or 0,
-                            "full_path": full_path,
+                            "full_path": "/".join(path_parts),
                             "text_content": text_content,
-                        }
-                    )
+                        })
+                except Exception as e:
+                    print(e)
+                    continue
 
-            except Exception as e:
-                print(e)
-                continue
+            append(token, "pathfinder", chunk_results)
+            yield
 
-            if self.files_checked % 10 == 0:
-                self.path_results = results
-                yield
-
-        self.path_results = results
-        self.debug_output = f"{len(results)} Vorkommen gefunden"
+        self.path_results = load(token, "pathfinder")
+        self.debug_output = f"{len(self.path_results)} Vorkommen gefunden"
         self.is_searching = False
 
 
@@ -277,7 +274,7 @@ def pathfinder_input() -> rx.Component:
 def pathfinder_page() -> rx.Component:
     """Page layout for tag/path search."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("TAG- UND PFADSUCHE"),
                 no_files_warning(),

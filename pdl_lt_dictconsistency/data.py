@@ -3,6 +3,7 @@ import reflex as rx
 from .state import FileState, MAX_FILE_SIZE
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     error_callout,
@@ -86,7 +87,7 @@ def existing_data_section() -> rx.Component:
     """Section for 'Vorliegende Daten' mode: folder picker + file tree."""
     return rx.vstack(
         section_heading("Vorliegende Daten"),
-        rx.text("Wählen Sie einen Ordner aus dem 'data'-Verzeichnis:"),
+        rx.text("Wählen Sie eine Datenquelle aus (konfiguriert in datasources.json):"),
         rx.hstack(
             rx.select(
                 FileState.data_folders,
@@ -157,6 +158,12 @@ def existing_data_section() -> rx.Component:
                         rx.box(),
                     ),
                     rx.button(
+                        "Alles auswählen",
+                        on_click=FileState.select_all,
+                        variant="outline",
+                        disabled=FileState.is_loading,
+                    ),
+                    rx.button(
                         "Auswahl entfernen",
                         on_click=FileState.deselect_all,
                         variant="ghost",
@@ -208,7 +215,7 @@ def select_data_input_method() -> rx.Component:
             rx.text(
                 "'Verzeichnispfad' durchsucht ein Verzeichnis (geeignet bei lokaler Installation). "
                 "'Datei-Upload' lädt XML-Dateien oder ZIP-Archive hoch. "
-                "'Vorliegende Daten' wählt aus Ordnern im server-seitigen 'data'-Verzeichnis.",
+                "'Vorliegende Daten' wählt aus konfigurierten Datenquellen (datasources.json).",
                 color="gray",
                 style={"font_style": "italic"},
             ),
@@ -419,7 +426,7 @@ def upload_section() -> rx.Component:
 def data_page() -> rx.Component:
     """Page layout for data import."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("DATEN"),
                 select_data_input_method(),

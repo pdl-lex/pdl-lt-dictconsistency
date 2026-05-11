@@ -5,6 +5,7 @@ from .state import FileState
 from .settings import LLMSettingsState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -133,13 +134,8 @@ class LLMQueryState(rx.State):
         """Rough token estimate for selected files."""
         return self._selected_files_char_count // CHARS_PER_TOKEN
 
-    @rx.var
+    @rx.var(auto_deps=False)
     def context_budget(self) -> int:
-        """Available token budget (model context - response reserve)."""
-        from .settings import LLMSettingsState
-        # Can't await get_state in computed var, so we access via substates
-        # For now use a reasonable default; real value comes from settings
-        # This is recalculated in the template using LLMSettingsState directly
         return 0  # placeholder, actual display uses LLMSettingsState.model_context_length
 
     @rx.var
@@ -759,7 +755,7 @@ def system_prompt_section() -> rx.Component:
 def llm_query_page() -> rx.Component:
     """Page layout for LLM query interface."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("LLM-ANFRAGE"),
                 rx.text(

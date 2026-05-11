@@ -5,7 +5,7 @@
 
 import reflex as rx
 
-from .components import base_layout, page_heading
+from .components import base_layout, page_container, page_heading
 
 
 # ============ Start Page ============
@@ -14,7 +14,7 @@ from .components import base_layout, page_heading
 def index() -> rx.Component:
     """Landing page with app description and usage steps."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("START"),
                 rx.text(
@@ -31,7 +31,7 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Verzeichnis angeben oder XML/ZIP-Dateien hochladen."
+                            rx.data_list.value("Daten aus Verzeichnis laden, XML/ZIP-Dateien hochladen, oder ausgewählte Wörterbücher laden."
 
                             ),
                         ),
@@ -42,7 +42,18 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Prüfung auf XML-Wohlgeformtheit und TEI-Lex 0 Konformität"
+                            rx.data_list.value("Prüfung auf XML-Wohlgeformtheit und TEI-Lex 0 Konformität."
+
+                            ),
+                        ),
+                        rx.data_list.item(
+                            rx.data_list.label(
+                                rx.badge(
+                                    "Strukturanalyse",
+                                    variant="soft",
+                                )
+                                ),
+                            rx.data_list.value("Analysiert den XML-Baum aller hochgeladenen Dateien, zeigt Attribute und Werte an, und erlaubt die Projektion einzelner Dateien in den gesamten Baum."
 
                             ),
                         ),
@@ -53,7 +64,7 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Suche nach bestimmten Tags oder Pfaden im XML-Baum, inklusive Wildcards"
+                            rx.data_list.value("Suche nach bestimmten Tags oder Pfaden im XML-Baum, inklusive Wildcards."
 
                             ),
                         ),
@@ -64,7 +75,7 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Suche nach Textinhalten, leeren Tags und Umbrüchen"
+                            rx.data_list.value("Suche nach Textinhalten, leeren Tags und Umbrüchen."
 
                             ),
                         ),
@@ -75,7 +86,29 @@ def index() -> rx.Component:
                                     variant="soft",
                                 )
                                 ),
-                            rx.data_list.value("Prüft, ob Tags oder Attribute mehrfach vorkommen"
+                            rx.data_list.value("Prüft, ob Tags oder Attribute mehrfach vorkommen."
+
+                            ),
+                        ),
+                        rx.data_list.item(
+                            rx.data_list.label(
+                                rx.badge(
+                                    "Einmaligkeit",
+                                    variant="soft",
+                                )
+                                ),
+                            rx.data_list.value("Analyisert Verschachtelung und Verschachtelungstiefe."
+
+                            ),
+                        ),
+                        rx.data_list.item(
+                            rx.data_list.label(
+                                rx.badge(
+                                    "Anzahl und Länge",
+                                    variant="soft",
+                                )
+                                ),
+                            rx.data_list.value("Bedeutungsangaben können hinsichtlich ihrer Anzahl, sowie minimaler und maximaler Länge ausgewertet werden."
 
                             ),
                         ),
@@ -100,8 +133,8 @@ def index() -> rx.Component:
 
 # ============ Page Registry ============
 
-# Map routes to page functions (index is registered separately)
-PAGES: dict[str, callable] = {}
+# Map routes to (page_function, page_title)
+PAGES: dict[str, tuple[callable, str]] = {}
 
 
 def _register_pages() -> None:
@@ -118,35 +151,34 @@ def _register_pages() -> None:
     from .ocr_query import ocr_query_page
     from .xml_structure import xml_structure_page
 
-    PAGES["/data"] = data_page
-    PAGES["/validator"] = validator_page
-    PAGES["/pathfinder"] = pathfinder_page
-    PAGES["/tag-content"] = tag_content_page
-    PAGES["/uniqueness"] = uniqueness_page
-    PAGES["/nesting"] = nesting_page
-    PAGES["/senses-stats"] = senses_stats_page
-    PAGES["/settings"] = settings_page
-    PAGES["/llm-query"] = llm_query_page
-    PAGES["/ocr-query"] = ocr_query_page
-    PAGES["/xml-structure"] = xml_structure_page
+    PAGES["/data"] = (data_page, "Daten")
+    PAGES["/validator"] = (validator_page, "XML-Validator")
+    PAGES["/pathfinder"] = (pathfinder_page, "Tag- und Pfadsuche")
+    PAGES["/tag-content"] = (tag_content_page, "Inhalt / Leere Tags")
+    PAGES["/uniqueness"] = (uniqueness_page, "Einmaligkeit")
+    PAGES["/nesting"] = (nesting_page, "Verschachtelung")
+    PAGES["/senses-stats"] = (senses_stats_page, "Anzahl und Länge")
+    PAGES["/settings"] = (settings_page, "LLM-Einstellungen")
+    PAGES["/llm-query"] = (llm_query_page, "LLM-Anfrage")
+    PAGES["/ocr-query"] = (ocr_query_page, "Texterkennung (OCR)")
+    PAGES["/xml-structure"] = (xml_structure_page, "Strukturanalyse")
 
 
 _register_pages()
 
+_APP_TITLE = "LT Wörterbuch-Konsistenzprüfung"
 
 # ============ App ============
 
 app = rx.App(
     theme=rx.theme(
-    accent_color="gray",
-    gray_color="sand",
+    accent_color="jade",
+    # gray_color="sand",
+    has_background=True,
+    radius="large",
     appearance="light",
     )
 )
-app.add_page(index)
-for route, page_fn in PAGES.items():
-    app.add_page(page_fn, route=route)
-
-
-
-# app.add_page(index, route="/", title="LT Sachgruppen-Vorhersage | Start")
+app.add_page(index, title=f"Start | {_APP_TITLE}")
+for route, (page_fn, page_title) in PAGES.items():
+    app.add_page(page_fn, route=route, title=f"{page_title} | {_APP_TITLE}")

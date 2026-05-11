@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -127,6 +128,10 @@ class TagContentState(rx.State):
             return
 
         base_path = Path(file_state.directory_path).expanduser()
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_loading_tags = False
+            return
         tags_set: set[str] = set()
 
         for file_info in file_state.xml_files_data:
@@ -208,78 +213,75 @@ class TagContentState(rx.State):
             tags_to_search = self.included_tags
 
         base_path = Path(file_state.directory_path).expanduser()
-        results: list[dict] = []
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_searching = False
+            return
+
+        from .processing import CHUNK_SIZE, append, load, clear
+        token = self.router.session.client_token
+        clear(token, "tag_content")
         tag_found_in_documents = False
+        all_files = list(file_state.xml_files_data)
 
-        for file_info in file_state.xml_files_data:
-            subdir = file_info["subdir"]
-            filename = file_info["filename"]
+        for chunk_start in range(0, len(all_files), CHUNK_SIZE):
+            chunk = all_files[chunk_start : chunk_start + CHUNK_SIZE]
+            chunk_results: list[dict] = []
 
-            if subdir == ".":
-                file_path = base_path / filename
-            else:
-                file_path = base_path / subdir / filename
+            for file_info in chunk:
+                subdir = file_info["subdir"]
+                filename = file_info["filename"]
+                file_path = base_path / filename if subdir == "." else base_path / subdir / filename
+                self.files_checked += 1
 
-            self.files_checked += 1
+                try:
+                    with open(file_path, "rb") as f:
+                        doc = etree.parse(f)
 
-            try:
-                with open(file_path, "rb") as f:
-                    doc = etree.parse(f)
+                    for tag_name in tags_to_search:
+                        xpath = f"//*[local-name()='{tag_name}']"
+                        elements = doc.xpath(xpath)
 
-                for tag_name in tags_to_search:
-                    xpath = f"//*[local-name()='{tag_name}']"
-                    elements = doc.xpath(xpath)
+                        if is_single_tag_mode and len(elements) > 0:
+                            tag_found_in_documents = True
 
-                    if is_single_tag_mode and len(elements) > 0:
-                        tag_found_in_documents = True
-
-                    for elem in elements:
-                        elem_text = self._get_element_text(elem, self.include_whitespace)
-
-                        # Skip formatting whitespace (indentation after newlines)
-                        if self.include_whitespace and elem_text:
-                            if elem_text.startswith("\n") and not elem_text.strip():
-                                continue
-
-                        match = False
-                        if self.search_text:
-                            search_term = self.search_text
-                            if not self.include_whitespace:
-                                search_term_normalized = " ".join(search_term.split())
-                                if search_term_normalized and search_term_normalized in elem_text:
-                                    match = True
+                        for elem in elements:
+                            elem_text = self._get_element_text(elem, self.include_whitespace)
+                            if self.include_whitespace and elem_text:
+                                if elem_text.startswith("\n") and not elem_text.strip():
+                                    continue
+                            match = False
+                            if self.search_text:
+                                search_term = self.search_text
+                                if not self.include_whitespace:
+                                    search_term_normalized = " ".join(search_term.split())
+                                    if search_term_normalized and search_term_normalized in elem_text:
+                                        match = True
+                                else:
+                                    if search_term in elem_text:
+                                        match = True
                             else:
-                                if search_term in elem_text:
+                                if elem_text:
                                     match = True
-                        else:
-                            if elem_text:
-                                match = True
-
-                        if match:
-                            display_text = elem_text
-                            if len(display_text) > 200:
-                                display_text = display_text[:200] + "..."
-                            display_text = self._format_text_with_visible_whitespace(display_text)
-
-                            results.append(
-                                {
-                                    "subdir": subdir,
-                                    "filename": filename,
+                            if match:
+                                display_text = elem_text
+                                if len(display_text) > 200:
+                                    display_text = display_text[:200] + "..."
+                                display_text = self._format_text_with_visible_whitespace(display_text)
+                                chunk_results.append({
+                                    "subdir": subdir, "filename": filename,
                                     "line": elem.sourceline or 0,
-                                    "tag": tag_name,
-                                    "text": display_text,
-                                }
-                            )
+                                    "tag": tag_name, "text": display_text,
+                                })
 
-            except Exception as e:
-                print(f"Error searching {filename}: {e}")
-                continue
+                except Exception as e:
+                    print(f"Error searching {filename}: {e}")
+                    continue
 
-            if self.files_checked % 10 == 0:
-                self.content_results = results.copy()
-                yield
+            append(token, "tag_content", chunk_results)
+            yield
 
-        self.content_results = results
+        self.content_results = load(token, "tag_content")
         if is_single_tag_mode and not tag_found_in_documents:
             self.tag_not_found = True
         self.is_searching = False
@@ -509,7 +511,7 @@ def tag_content_input() -> rx.Component:
 def tag_content_page() -> rx.Component:
     """Page layout for tag content search."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("INHALT & LEERE TAGS"),
                 no_files_warning(),

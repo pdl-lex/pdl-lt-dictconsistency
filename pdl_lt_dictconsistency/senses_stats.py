@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -83,63 +84,61 @@ class SensesStatsState(rx.State):
 
         self._total_files = len(file_state.xml_files_data)
         base_path = Path(file_state.directory_path).expanduser()
-        results: list[dict] = []
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_checking = False
+            return
+
+        from .processing import CHUNK_SIZE, append, load, clear
+        token = self.router.session.client_token
+        clear(token, "senses")
         xpath = f"//*[local-name()='{tag_name}']"
+        parser = etree.XMLParser(dtd_validation=False, load_dtd=False, no_network=True, resolve_entities=False)
+        all_files = list(file_state.xml_files_data)
 
-        for file_info in file_state.xml_files_data:
-            subdir = file_info["subdir"]
-            filename = file_info["filename"]
-            file_path = (
-                base_path / filename if subdir == "."
-                else base_path / subdir / filename
-            )
-            self.files_checked += 1
+        for chunk_start in range(0, len(all_files), CHUNK_SIZE):
+            chunk = all_files[chunk_start : chunk_start + CHUNK_SIZE]
+            chunk_results: list[dict] = []
 
-            try:
-                parser = etree.XMLParser(
-                    dtd_validation=False, load_dtd=False,
-                    no_network=True, resolve_entities=False,
+            for file_info in chunk:
+                subdir = file_info["subdir"]
+                filename = file_info["filename"]
+                file_path = (
+                    base_path / filename if subdir == "."
+                    else base_path / subdir / filename
                 )
-                with open(file_path, "rb") as f:
-                    doc = etree.parse(f, parser)
+                self.files_checked += 1
 
-                elements = doc.xpath(xpath)
-                count = len(elements)
+                try:
+                    with open(file_path, "rb") as f:
+                        doc = etree.parse(f, parser)
+                    elements = doc.xpath(xpath)
+                    count = len(elements)
+                    if count == 0:
+                        chunk_results.append({
+                            "subdir": subdir, "filename": filename,
+                            "count": 0, "min_length": "-", "max_length": "-", "avg_length": "-",
+                        })
+                    else:
+                        lengths = [
+                            len("".join(elem.itertext()))
+                            for elem in elements if isinstance(elem, etree._Element)
+                        ]
+                        avg = round(sum(lengths) / len(lengths), 1) if lengths else 0
+                        chunk_results.append({
+                            "subdir": subdir, "filename": filename, "count": count,
+                            "min_length": min(lengths) if lengths else "-",
+                            "max_length": max(lengths) if lengths else "-",
+                            "avg_length": avg,
+                        })
+                except Exception as e:
+                    print(f"Error in {filename}: {e}")
+                    continue
 
-                if count == 0:
-                    results.append({
-                        "subdir": subdir,
-                        "filename": filename,
-                        "count": 0,
-                        "min_length": "-",
-                        "max_length": "-",
-                        "avg_length": "-",
-                    })
-                else:
-                    lengths = [
-                        len("".join(elem.itertext()))
-                        for elem in elements
-                        if isinstance(elem, etree._Element)
-                    ]
-                    avg = round(sum(lengths) / len(lengths), 1) if lengths else 0
-                    results.append({
-                        "subdir": subdir,
-                        "filename": filename,
-                        "count": count,
-                        "min_length": min(lengths) if lengths else "-",
-                        "max_length": max(lengths) if lengths else "-",
-                        "avg_length": avg,
-                    })
+            append(token, "senses", chunk_results)
+            yield
 
-            except Exception as e:
-                print(f"Error in {filename}: {e}")
-                continue
-
-            if self.files_checked % 10 == 0:
-                self.stats_results = results.copy()
-                yield
-
-        self.stats_results = results
+        self.stats_results = load(token, "senses")
         self.has_checked = True
         self.is_checking = False
 
@@ -233,7 +232,7 @@ def senses_stats_form() -> rx.Component:
 def senses_stats_page() -> rx.Component:
     """Page layout for sense/meaning statistics."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("ANZAHL UND LÄNGE"),
                 no_files_warning(),

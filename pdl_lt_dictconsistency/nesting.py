@@ -5,6 +5,7 @@ from lxml import etree
 from .state import FileState
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     no_files_warning,
@@ -166,65 +167,68 @@ class NestingState(rx.State):
 
         self._total_files = len(file_state.xml_files_data)
         base_path = Path(file_state.directory_path).expanduser()
-        results: list[dict] = []
+        if not base_path.exists():
+            self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
+            self.is_checking = False
+            return
 
-        for file_info in file_state.xml_files_data:
-            subdir = file_info["subdir"]
-            filename = file_info["filename"]
-            file_path = (
-                base_path / filename if subdir == "."
-                else base_path / subdir / filename
-            )
-            self.files_checked += 1
+        from .processing import CHUNK_SIZE, append, load, clear
+        token = self.router.session.client_token
+        clear(token, "nesting")
+        all_files = list(file_state.xml_files_data)
+        parser = etree.XMLParser(dtd_validation=False, load_dtd=False, no_network=True, resolve_entities=False)
 
-            try:
-                parser = etree.XMLParser(
-                    dtd_validation=False, load_dtd=False,
-                    no_network=True, resolve_entities=False,
+        for chunk_start in range(0, len(all_files), CHUNK_SIZE):
+            chunk = all_files[chunk_start : chunk_start + CHUNK_SIZE]
+            chunk_results: list[dict] = []
+
+            for file_info in chunk:
+                subdir = file_info["subdir"]
+                filename = file_info["filename"]
+                file_path = (
+                    base_path / filename if subdir == "."
+                    else base_path / subdir / filename
                 )
-                with open(file_path, "rb") as f:
-                    doc = etree.parse(f, parser)
+                self.files_checked += 1
 
                 try:
-                    elements = doc.xpath(xpath)
-                except etree.XPathEvalError as e:
-                    self.error_message = f"Ungültiger Ausdruck: {e}"
-                    self.is_checking = False
-                    return
+                    with open(file_path, "rb") as f:
+                        doc = etree.parse(f, parser)
 
-                for elem in elements:
-                    if not isinstance(elem, etree._Element):
-                        continue
+                    try:
+                        elements = doc.xpath(xpath)
+                    except etree.XPathEvalError as e:
+                        self.error_message = f"Ungültiger Ausdruck: {e}"
+                        self.is_checking = False
+                        return
 
-                    if is_path_mode:
-                        elem_tag = etree.QName(elem).localname if isinstance(elem.tag, str) else "?"
-                        results.append({
-                            "subdir": subdir,
-                            "filename": filename,
-                            "line": elem.sourceline or 0,
-                            "depth": "",
-                            "details": f"<{elem_tag}>",
-                        })
-                    else:
-                        depth, path = self._get_depth_and_path(elem, tag_name, is_direct)
-                        if depth > 1:
-                            results.append({
-                                "subdir": subdir,
-                                "filename": filename,
-                                "line": elem.sourceline or 0,
-                                "depth": depth,
-                                "details": path,
+                    for elem in elements:
+                        if not isinstance(elem, etree._Element):
+                            continue
+                        if is_path_mode:
+                            elem_tag = etree.QName(elem).localname if isinstance(elem.tag, str) else "?"
+                            chunk_results.append({
+                                "subdir": subdir, "filename": filename,
+                                "line": elem.sourceline or 0, "depth": "",
+                                "details": f"<{elem_tag}>",
                             })
+                        else:
+                            depth, path = self._get_depth_and_path(elem, tag_name, is_direct)
+                            if depth > 1:
+                                chunk_results.append({
+                                    "subdir": subdir, "filename": filename,
+                                    "line": elem.sourceline or 0,
+                                    "depth": depth, "details": path,
+                                })
 
-            except Exception as e:
-                print(f"Error in {filename}: {e}")
-                continue
+                except Exception as e:
+                    print(f"Error in {filename}: {e}")
+                    continue
 
-            if self.files_checked % 10 == 0:
-                self.nesting_results = results.copy()
-                yield
+            append(token, "nesting", chunk_results)
+            yield
 
-        self.nesting_results = results
+        self.nesting_results = load(token, "nesting")
         self.has_checked = True
         self.is_checking = False
 
@@ -257,7 +261,7 @@ def nesting_check() -> rx.Component:
         rx.cond(
             NestingState.search_mode == "Beliebige Verschachtelung",
             rx.callout(
-                "Zählt alle Vorfahren desselben Tags, auch wenn andere Tags dazwischen liegen. "
+                "Zählt alle Vorkommen desselben Tags, auch wenn andere Tags dazwischen liegen. "
                 "sense > sense > sense = Tiefe 3,  sense > cit > sense = Tiefe 2.",
                 icon="info",
                 color_scheme="blue",
@@ -384,7 +388,7 @@ def nesting_check() -> rx.Component:
 def nesting_page() -> rx.Component:
     """Page layout for nesting checks."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("VERSCHACHTELUNG"),
                 no_files_warning(),

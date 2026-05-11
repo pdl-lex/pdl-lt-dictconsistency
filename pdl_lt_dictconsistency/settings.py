@@ -2,6 +2,7 @@ import reflex as rx
 
 from .components import (
     base_layout,
+    page_container,
     page_heading,
     section_heading,
     HEADING_SECTION,
@@ -461,7 +462,7 @@ def connection_settings_section() -> rx.Component:
 def settings_page() -> rx.Component:
     """Page layout for LLM settings."""
     return base_layout(
-        rx.container(
+        page_container(
             rx.vstack(
                 page_heading("EINSTELLUNGEN"),
                 rx.text(
