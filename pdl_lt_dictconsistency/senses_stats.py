@@ -23,6 +23,7 @@ SENSES_STATS_COLUMN_DEFS = [
     {"field": "min_length", "headerName": "Min. Länge", "sortable": True, "filter": True},
     {"field": "max_length", "headerName": "Max. Länge", "sortable": True, "filter": True},
     {"field": "avg_length", "headerName": "Ø Länge", "sortable": True, "filter": True},
+    {"field": "quelle", "headerName": "Gedruckte Ausgabe", "sortable": True, "filter": True},
 ]
 
 
@@ -89,7 +90,7 @@ class SensesStatsState(rx.State):
             self.is_checking = False
             return
 
-        from .processing import CHUNK_SIZE, append, load, clear
+        from .processing import CHUNK_SIZE, append, load, clear, get_quelle
         token = self.router.session.client_token
         clear(token, "senses")
         xpath = f"//*[local-name()='{tag_name}']"
@@ -112,11 +113,12 @@ class SensesStatsState(rx.State):
                 try:
                     with open(file_path, "rb") as f:
                         doc = etree.parse(f, parser)
+                    quelle = get_quelle(doc.getroot(), filename)
                     elements = doc.xpath(xpath)
                     count = len(elements)
                     if count == 0:
                         chunk_results.append({
-                            "subdir": subdir, "filename": filename,
+                            "quelle": quelle, "subdir": subdir, "filename": filename,
                             "count": 0, "min_length": "-", "max_length": "-", "avg_length": "-",
                         })
                     else:
@@ -126,7 +128,7 @@ class SensesStatsState(rx.State):
                         ]
                         avg = round(sum(lengths) / len(lengths), 1) if lengths else 0
                         chunk_results.append({
-                            "subdir": subdir, "filename": filename, "count": count,
+                            "quelle": quelle, "subdir": subdir, "filename": filename, "count": count,
                             "min_length": min(lengths) if lengths else "-",
                             "max_length": max(lengths) if lengths else "-",
                             "avg_length": avg,

@@ -3,7 +3,7 @@ from pathlib import Path
 from lxml import etree
 
 from .state import FileState
-from .processing import CHUNK_SIZE, append, load, clear
+from .processing import CHUNK_SIZE, append, load, clear, get_quelle
 from .components import (
     base_layout,
     page_container,
@@ -22,6 +22,7 @@ PATHFINDER_COLUMN_DEFS = [
     {"field": "line", "headerName": "Zeile", "sortable": True, "filter": True},
     {"field": "full_path", "headerName": "XPath", "sortable": True, "filter": True},
     {"field": "text_content", "headerName": "Inhalt", "sortable": True, "filter": True},
+    {"field": "quelle", "headerName": "Gedruckte Ausgabe", "sortable": True, "filter": True},
 ]
 
 
@@ -147,6 +148,8 @@ class PathfinderState(rx.State):
                 try:
                     with open(file_path, "rb") as f:
                         doc = etree.parse(f)
+                    root = doc.getroot()
+                    quelle = get_quelle(root, filename)
                     for elem in doc.xpath(xpath):
                         path_parts: list[str] = []
                         current = elem
@@ -157,6 +160,7 @@ class PathfinderState(rx.State):
                         if len(text_content) > 100:
                             text_content = text_content[:100] + "..."
                         chunk_results.append({
+                            "quelle": quelle,
                             "subdir": subdir,
                             "filename": filename,
                             "line": elem.sourceline or 0,

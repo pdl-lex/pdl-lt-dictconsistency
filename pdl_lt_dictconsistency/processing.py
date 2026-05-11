@@ -27,6 +27,25 @@ def append(token: str, tag: str, items: list[dict]) -> None:
             f.write(json.dumps(item, ensure_ascii=False) + "\n")
 
 
+def get_quelle(root, filename: str) -> str:
+    """Return source label for a parsed XML document.
+
+    BWB files get "BWB Bd. X, H. Y"; all others get the filename.
+    Checks root element and its direct children (BWB stores wb/band/heft on
+    the <artikel> child, not on the <bdo> root).
+    root may be None (e.g. when the file failed to parse).
+    """
+    if root is None:
+        return filename
+    for elem in [root, *list(root)[:3]]:
+        wb = elem.get("wb", "")
+        if wb.lower() == "bwb":
+            band = elem.get("band", "?")
+            heft = elem.get("heft", "?")
+            return f"BWB Bd. {band}, H. {heft}"
+    return ""
+
+
 def load(token: str, tag: str) -> list[dict]:
     p = _path(token, tag)
     if not p.exists():

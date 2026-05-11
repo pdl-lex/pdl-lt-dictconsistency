@@ -23,6 +23,7 @@ UNIQUENESS_COLUMN_DEFS = [
     {"field": "line", "headerName": "Zeile", "sortable": True, "filter": True},
     {"field": "error_type", "headerName": "Fehlertyp", "sortable": True, "filter": True},
     {"field": "details", "headerName": "Details", "sortable": True, "filter": True},
+    {"field": "quelle", "headerName": "Gedruckte Ausgabe", "sortable": True, "filter": True},
 ]
 
 
@@ -132,7 +133,7 @@ class UniquenessState(rx.State):
             self.is_checking = False
             return
 
-        from .processing import CHUNK_SIZE, append, load, clear
+        from .processing import CHUNK_SIZE, append, load, clear, get_quelle
         token = self.router.session.client_token
         clear(token, "uniqueness")
         parser = etree.XMLParser(dtd_validation=False, load_dtd=False, no_network=True, resolve_entities=False)
@@ -151,6 +152,7 @@ class UniquenessState(rx.State):
                 try:
                     with open(file_path, "rb") as f:
                         doc = etree.parse(f, parser)
+                    quelle = get_quelle(doc.getroot(), filename)
 
                     if self.check_mode == "Tag":
                         xpath = f"//*[local-name()='{self.tag_name.strip()}']"
@@ -158,7 +160,7 @@ class UniquenessState(rx.State):
                         if len(elements) > 1:
                             first_line = elements[0].sourceline or 0
                             chunk_results.append({
-                                "subdir": subdir, "filename": filename, "line": first_line,
+                                "quelle": quelle, "subdir": subdir, "filename": filename, "line": first_line,
                                 "error_type": f"Tag '{self.tag_name.strip()}' kommt {len(elements)}x vor",
                                 "details": f"Erwartet: 1x, Gefunden: {len(elements)}x",
                             })
@@ -178,7 +180,7 @@ class UniquenessState(rx.State):
                             if len(lines) > 1:
                                 preview_text = content if len(content) <= 50 else content[:50] + "..."
                                 chunk_results.append({
-                                    "subdir": subdir, "filename": filename, "line": lines[0],
+                                    "quelle": quelle, "subdir": subdir, "filename": filename, "line": lines[0],
                                     "error_type": f"Inhalt '{preview_text}' in Tag '{self.tag_name.strip()}' kommt {len(lines)}x vor",
                                     "details": f"Zeilen: {', '.join(map(str, lines))}",
                                 })
@@ -197,7 +199,7 @@ class UniquenessState(rx.State):
                         for attr_value, lines in attr_map.items():
                             if len(lines) > 1:
                                 chunk_results.append({
-                                    "subdir": subdir, "filename": filename, "line": lines[0],
+                                    "quelle": quelle, "subdir": subdir, "filename": filename, "line": lines[0],
                                     "error_type": f"Attribut '{self.attribute_name.strip()}' mit Wert '{attr_value}' in Tag '{self.tag_name.strip()}' kommt {len(lines)}x vor",
                                     "details": f"Zeilen: {', '.join(map(str, lines))}",
                                 })
@@ -217,7 +219,7 @@ class UniquenessState(rx.State):
                             if len(occurrences) > 1:
                                 tag_list = ", ".join([f"{tag}:{line}" for tag, line in occurrences])
                                 chunk_results.append({
-                                    "subdir": subdir, "filename": filename, "line": occurrences[0][1],
+                                    "quelle": quelle, "subdir": subdir, "filename": filename, "line": occurrences[0][1],
                                     "error_type": f"Attribut '{self.attribute_name.strip()}' mit Wert '{attr_value}' kommt {len(occurrences)}x vor",
                                     "details": f"In: {tag_list}",
                                 })

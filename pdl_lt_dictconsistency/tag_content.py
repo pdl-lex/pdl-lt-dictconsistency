@@ -22,6 +22,7 @@ TAG_CONTENT_COLUMN_DEFS = [
     {"field": "line", "headerName": "Zeile", "sortable": True, "filter": True},
     {"field": "tag", "headerName": "Tag", "sortable": True, "filter": True},
     {"field": "text", "headerName": "Inhalt", "sortable": True, "filter": True},
+    {"field": "quelle", "headerName": "Gedruckte Ausgabe", "sortable": True, "filter": True},
 ]
 
 
@@ -218,7 +219,7 @@ class TagContentState(rx.State):
             self.is_searching = False
             return
 
-        from .processing import CHUNK_SIZE, append, load, clear
+        from .processing import CHUNK_SIZE, append, load, clear, get_quelle
         token = self.router.session.client_token
         clear(token, "tag_content")
         tag_found_in_documents = False
@@ -237,6 +238,7 @@ class TagContentState(rx.State):
                 try:
                     with open(file_path, "rb") as f:
                         doc = etree.parse(f)
+                    quelle = get_quelle(doc.getroot(), filename)
 
                     for tag_name in tags_to_search:
                         xpath = f"//*[local-name()='{tag_name}']"
@@ -269,6 +271,7 @@ class TagContentState(rx.State):
                                     display_text = display_text[:200] + "..."
                                 display_text = self._format_text_with_visible_whitespace(display_text)
                                 chunk_results.append({
+                                    "quelle": quelle,
                                     "subdir": subdir, "filename": filename,
                                     "line": elem.sourceline or 0,
                                     "tag": tag_name, "text": display_text,

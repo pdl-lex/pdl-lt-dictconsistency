@@ -23,6 +23,7 @@ NESTING_COLUMN_DEFS = [
     {"field": "line", "headerName": "Zeile", "sortable": True, "filter": True},
     {"field": "depth", "headerName": "Tiefe", "sortable": True, "filter": True},
     {"field": "details", "headerName": "Pfad", "sortable": True, "filter": True},
+    {"field": "quelle", "headerName": "Gedruckte Ausgabe", "sortable": True, "filter": True},
 ]
 
 
@@ -172,7 +173,7 @@ class NestingState(rx.State):
             self.is_checking = False
             return
 
-        from .processing import CHUNK_SIZE, append, load, clear
+        from .processing import CHUNK_SIZE, append, load, clear, get_quelle
         token = self.router.session.client_token
         clear(token, "nesting")
         all_files = list(file_state.xml_files_data)
@@ -194,6 +195,7 @@ class NestingState(rx.State):
                 try:
                     with open(file_path, "rb") as f:
                         doc = etree.parse(f, parser)
+                    quelle = get_quelle(doc.getroot(), filename)
 
                     try:
                         elements = doc.xpath(xpath)
@@ -208,7 +210,7 @@ class NestingState(rx.State):
                         if is_path_mode:
                             elem_tag = etree.QName(elem).localname if isinstance(elem.tag, str) else "?"
                             chunk_results.append({
-                                "subdir": subdir, "filename": filename,
+                                "quelle": quelle, "subdir": subdir, "filename": filename,
                                 "line": elem.sourceline or 0, "depth": "",
                                 "details": f"<{elem_tag}>",
                             })
@@ -216,7 +218,7 @@ class NestingState(rx.State):
                             depth, path = self._get_depth_and_path(elem, tag_name, is_direct)
                             if depth > 1:
                                 chunk_results.append({
-                                    "subdir": subdir, "filename": filename,
+                                    "quelle": quelle, "subdir": subdir, "filename": filename,
                                     "line": elem.sourceline or 0,
                                     "depth": depth, "details": path,
                                 })

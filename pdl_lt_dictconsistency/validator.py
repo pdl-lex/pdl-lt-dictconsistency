@@ -23,6 +23,7 @@ VALIDATOR_COLUMN_DEFS = [
     {"field": "line", "headerName": "Zeile", "sortable": True, "filter": True},
     {"field": "column", "headerName": "Spalte", "sortable": True, "filter": True},
     {"field": "error", "headerName": "Fehler", "sortable": True, "filter": True},
+    {"field": "quelle", "headerName": "Gedruckte Ausgabe", "sortable": True, "filter": True},
 ]
 
 
@@ -132,7 +133,7 @@ class ValidatorState(rx.State):
             self.error_message = f"Verzeichnis nicht gefunden: {base_path}"
             self.is_validating = False
             return
-        from .processing import CHUNK_SIZE, append, load, clear
+        from .processing import CHUNK_SIZE, append, load, clear, get_quelle
         token = self.router.session.client_token
         clear(token, "wellformed")
         clear(token, "schema")
@@ -170,12 +171,13 @@ class ValidatorState(rx.State):
                 try:
                     with open(file_path, "rb") as f:
                         doc = etree.parse(f)
+                    quelle = get_quelle(doc.getroot(), filename)
                     if rng_schema is not None:
                         if not rng_schema.validate(doc):
                             has_schema_error = True
                             for error in rng_schema.error_log:
                                 chunk_sc.append({
-                                    "subdir": subdir, "filename": filename,
+                                    "quelle": quelle, "subdir": subdir, "filename": filename,
                                     "line": error.line if error.line else 0,
                                     "column": error.column if error.column else 0,
                                     "error": error.message,
@@ -183,7 +185,7 @@ class ValidatorState(rx.State):
                 except etree.XMLSyntaxError as e:
                     has_wellformed_error = True
                     chunk_wf.append({
-                        "subdir": subdir, "filename": filename,
+                        "quelle": "", "subdir": subdir, "filename": filename,
                         "line": e.lineno if e.lineno else 0,
                         "column": e.offset if e.offset else 0,
                         "error": str(e.msg) if e.msg else str(e),
@@ -191,7 +193,7 @@ class ValidatorState(rx.State):
                 except Exception as e:
                     has_wellformed_error = True
                     chunk_wf.append({
-                        "subdir": subdir, "filename": filename,
+                        "quelle": "", "subdir": subdir, "filename": filename,
                         "line": 0, "column": 0, "error": str(e),
                     })
 
