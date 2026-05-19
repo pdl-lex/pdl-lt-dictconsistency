@@ -48,10 +48,10 @@ NAV_STRUCTURE: list[tuple[str, list[tuple[str, str]]]] = [
         ("Inhalt / Leere Tags", "/tag-content"),
         ("Einmaligkeit", "/uniqueness"),
         ("Verschachtelung", "/nesting"),
-
     ]),
-    ("Bedeutungen", [
+    ("Stil und Schreibung", [
         ("Anzahl und Länge", "/senses-stats"),
+        ("Alte Rechtschreibung", "/spelling"),
     ]),
     ("LLM", [
         ("Chat", "/llm-query"),

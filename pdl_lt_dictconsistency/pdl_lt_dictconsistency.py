@@ -150,6 +150,7 @@ def _register_pages() -> None:
     from .llm_query import llm_query_page
     from .ocr_query import ocr_query_page
     from .xml_structure import xml_structure_page
+    from .spelling import spelling_page
 
     PAGES["/data"] = (data_page, "Daten")
     PAGES["/validator"] = (validator_page, "XML-Validator")
@@ -162,6 +163,7 @@ def _register_pages() -> None:
     PAGES["/llm-query"] = (llm_query_page, "LLM-Anfrage")
     PAGES["/ocr-query"] = (ocr_query_page, "Texterkennung (OCR)")
     PAGES["/xml-structure"] = (xml_structure_page, "Strukturanalyse")
+    PAGES["/spelling"] = (spelling_page, "Rechtschreibung")
 
 
 _register_pages()
