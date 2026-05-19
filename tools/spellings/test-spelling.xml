@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Testdatei für die Altschreibungsprüfung.
+     Enthält bewusst alte Schreibweisen, damit der Checker sie erkennt.
+     Jeder Kommentar-Block dokumentiert die erwarteten alt→neu-Paare.
+     Die Datei muss keinen lexikografischen Sinn ergeben. -->
+<bdo>
+   <artikel wb="bwb"
+            handverlesen="ja"
+            id="test__spelling"
+            extrahiert="ja"
+            dummy="nein"
+            band="1"
+            heft="1"
+            lizenz="CC-BY-SA"
+            datum="20260519">
+      <lemma-position>
+         <grammatik wortart="Subst"/>
+         <such-lemma>Testlemma</such-lemma>
+         <lemma>Testlemma</lemma>
+      </lemma-position>
+      <bedeutung-position>
+
+         <!-- ── ß statt ss ──────────────────────────────────────────────── -->
+         <!-- alt: daß,    neu: dass    -->
+         <!-- alt: naß,    neu: nass    -->
+         <!-- alt: häßlich, neu: hässlich -->
+         <!-- alt: blaß,   neu: blass   -->
+         <!-- alt: muß,    neu: muss    -->
+         <!-- alt: mußte,  neu: musste  -->
+         <!-- alt: läßt,   neu: lässt   -->
+         <bedeutung>Er sagte, daß das Wasser naß und der Himmel häßlich blaß sei;
+            er muß daheim bleiben, weil es ihn nicht herausläßt; gestern mußte er
+            ebenso zuhause ausharren.</bedeutung>
+
+         <!-- ── ß im Verbpräteritum ──────────────────────────────────────── -->
+         <!-- alt: schloß, neu: schloss -->
+         <!-- alt: floß,   neu: floss   -->
+         <!-- alt: goß,    neu: goss    -->
+         <!-- alt: biß,    neu: biss    -->
+         <bedeutung>Die Schlange biß zu, das Wasser floß den Hang hinab, der Wirt
+            goß nach und schloß dann die Tür hinter sich.</bedeutung>
+
+         <!-- ── ph statt f ─────────────────────────────────────────────── -->
+         <!-- alt: Telephon,      neu: Telefon     -->
+         <!-- alt: Photographie,  neu: Fotografie  -->
+         <!-- alt: Paragraph,     neu: Paragraf    -->
+         <bedeutung>Das Telephon klingelte, als der Photograph den dritten Paragraph
+            erläuterte und die Schüler abphotographierte.</bedeutung>
+
+         <!-- ── Getrenntschreibung ──────────────────────────────────────── -->
+         <!-- alt: soviel,  neu: so viel  -->
+         <!-- alt: wieviel, neu: wie viel -->
+         <!-- alt: zuwenig, neu: zu wenig -->
+         <!-- alt: soweit,  neu: so weit  -->
+         <bedeutung>Es war soviel Arbeit und wieviel Zeit noch blieb, das war
+            soweit zuwenig, um den Auftrag zu erfüllen.</bedeutung>
+
+         <!-- ── Vokaländerung / Umlaut ──────────────────────────────────── -->
+         <!-- alt: Gemse,   neu: Gämse   -->
+         <!-- alt: Stengel, neu: Stängel -->
+         <!-- alt: Greuel,  neu: Gräuel  -->
+         <bedeutung>Die Gemse sprang über den Stengel, was ein Greuel war und
+            keinerlei Freude machte.</bedeutung>
+
+         <!-- ── Dreifachkonsonant ───────────────────────────────────────── -->
+         <!-- alt: Schiffahrt,  neu: Schifffahrt  -->
+         <!-- alt: Brennessel,  neu: Brennnessel  -->
+         <!-- alt: Rolladen,  neu: Rollladen  -->
+         <bedeutung>Bei der Schiffahrt auf dem See griff er versehentlich in eine
+            Brennessel und zog die Hand schnell vom Rolladenzurück.</bedeutung>
+
+         <!-- ── Sonstiges ───────────────────────────────────────────────── -->
+         <!-- alt: rauh,     neu: rau      -->
+         <!-- alt: greulich, neu: gräulich -->
+         <!-- alt: Roheit, neu: Rohheit -->
+         <bedeutung>Das Wetter in all seiner Roheit war rauh und greulich, die See aufgewühlt und
+            der Himmel bleiern.</bedeutung>
+
+      </bedeutung-position>
+      <verfasser kuerzel="W.H."/>
+   </artikel>
+</bdo>

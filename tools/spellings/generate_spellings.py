@@ -35,6 +35,7 @@ Abhaengigkeiten: keine externen (nur stdlib)
 import argparse
 import csv
 import json
+import re
 import time
 import urllib.parse
 import urllib.request
@@ -137,6 +138,41 @@ def generate_ph_pairs(dwds_words: set[str]) -> list[tuple[str, str]]:
         f_form = word.replace("Ph", "F").replace("ph", "f")
         if f_form in dwds_words:
             pairs.append((word, f_form))
+
+    return pairs
+
+
+def generate_triple_pairs(dwds_words: set[str]) -> list[tuple[str, str]]:
+    """
+    Erzeugt alt->neu-Paare für Dreifachkonsonanten aus der DWDS-Lemmaliste.
+
+    Vor der Reform wurden drei gleiche Konsonanten an Wortgrenzen auf zwei
+    reduziert (Brennessel statt Brennnessel, Schiffahrt statt Schifffahrt).
+    Seit 1996 müssen alle drei geschrieben werden.
+
+    Für jedes DWDS-Lemma mit drei gleichen aufeinanderfolgenden Konsonanten:
+    Entferne einen Konsonanten. Existiert die Kurzform ebenfalls in DWDS
+    -> Altschreibungspaar.
+
+    's' wird ausgelassen: sss-Fälle entstehen bereits durch ß->ss (z. B.
+    Ablaßschleuse -> Ablassschleuse) und sind dort schon erfasst.
+    """
+    pairs: list[tuple[str, str]] = []
+    _triple = re.compile(r"([bcdfgklmnprt])\1\1", re.IGNORECASE)
+    seen: set[tuple[str, str]] = set()
+
+    for word in sorted(dwds_words):
+        m = _triple.search(word)
+        if not m:
+            continue
+        # Entferne den ersten der drei gleichen Konsonanten -> Altform
+        pos = m.start()
+        short_form = word[:pos] + word[pos + 1:]
+        if short_form in dwds_words:
+            pair = (short_form, word)
+            if pair not in seen:
+                seen.add(pair)
+                pairs.append(pair)
 
     return pairs
 
@@ -280,9 +316,14 @@ def main() -> None:
     ph_pairs = generate_ph_pairs(dwds_words)
     print(f"  {len(ph_pairs)} Paare.")
 
-    # 4. Optional: API-Validierung der Heuristik-Kandidaten
+    # 4. Dreifachkonsonanten-Paare aus DWDS erzeugen
+    print("\nErzeuge Dreifachkonsonanten-Paare aus DWDS...")
+    triple_pairs = generate_triple_pairs(dwds_words)
+    print(f"  {len(triple_pairs)} Paare.")
+
+    # 5. Optional: API-Validierung der Heuristik-Kandidaten
     if args.api:
-        heuristic_pairs = ss_pairs + ph_pairs
+        heuristic_pairs = ss_pairs + ph_pairs + triple_pairs
         minutes = len(heuristic_pairs) / args.rate_limit / 60
         print(
             f"\nAPI-Validierung ({len(heuristic_pairs)} Paare, "
@@ -292,16 +333,16 @@ def main() -> None:
         whitelist_words.extend(newly_correct)
         base_pairs = validated_pairs
     else:
-        base_pairs = ss_pairs + ph_pairs
+        base_pairs = ss_pairs + ph_pairs + triple_pairs
 
-    # 5. Supplement laden (Getrenntschreibung, Sonstiges etc.)
+    # 6. Supplement laden (Getrenntschreibung, Sonstiges etc.)
     print("\nLade Supplement...")
     supplement = load_supplement()
 
-    # 6. Zusammenfuehren: Supplement am Ende -> bei Dedup Vorrang
+    # 7. Zusammenfuehren: Supplement am Ende -> bei Dedup Vorrang
     all_pairs = base_pairs + supplement
 
-    # 7. Schreiben
+    # 8. Schreiben
     print("\nSchreibe Ausgabe...")
     write_spellings(all_pairs)
     write_whitelist(whitelist_words)
