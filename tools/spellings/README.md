@@ -11,10 +11,10 @@ Dieses Verzeichnis enthält die Wortlisten für die Altschreibungs-Prüfung
 | `whitelist.csv` | Wörter, die in neuer Rechtschreibung korrekt ß enthalten |
 | `supplement.csv` | Manuell gepflegte Paare (Getrenntschreibung, Sonstiges) |
 | `generate_spellings.py` | Erzeugt `spellings.csv` und `whitelist.csv` aus DWDS + Supplement |
-| `query_dwds_api.py` | Vollständige DWDS-API-Abfrage aller Lemmata (einmalig, lange Laufzeit) |
 | `dwds/` | DWDS-Lemmalisten (CSV, datiert; neueste wird automatisch verwendet) |
+| `dwds/query_dwds_api.py` | Vollständige DWDS-API-Abfrage aller Lemmata (einmalig, lange Laufzeit) |
 | `dwds/*-api.csv` | Ausgabe von `query_dwds_api.py` (Originalspalten + `lemma-neu`) |
-| `dwds_api_errors.csv` | Fehlerdatei von `query_dwds_api.py` (persistiert über Läufe) |
+| `dwds/dwds_api_errors.csv` | Fehlerdatei von `query_dwds_api.py` (persistiert über Läufe) |
 
 ## Wortlisten aktualisieren
 
@@ -22,18 +22,15 @@ Dieses Verzeichnis enthält die Wortlisten für die Altschreibungs-Prüfung
 # Offline (nur DWDS-CSV + Supplement, keine Netzwerkverbindung nötig)
 uv run python tools/spellings/generate_spellings.py
 
-# Mit API-Validierung (empfohlen, braucht Internetverbindung)
-uv run python tools/spellings/generate_spellings.py --api
-
-# Mit höherer Anfragerate (Anfragen pro Sekunde, Standard: 2)
-uv run python tools/spellings/generate_spellings.py --api --rate-limit 5
+# Mit API-Liste (empfohlen; erst query_dwds_api.py vollständig ausführen)
+uv run python tools/spellings/generate_spellings.py --list dwds/dwds_lemmata_2026-05-18-api.csv
 ```
 
 Voraussetzung: eine aktuelle DWDS-Lemmaliste als CSV im Unterordner `dwds/`
 (Dateiname beliebig, das Skript nimmt die alphabetisch neueste).
 Die Liste ist abrufbar unter: https://www.dwds.de/d/dtb#lemmalist
 
-## DWDS-Vollabfrage (`query_dwds_api.py`)
+## DWDS-Vollabfrage (`dwds/query_dwds_api.py`)
 
 `generate_spellings.py` deckt nur ß/ss-, ph/f- und Dreifachkonsonant-Fälle
 algorithmisch ab. Um weitere Altschreibungen zu finden (Vokaländerungen,
@@ -43,29 +40,31 @@ h-Wegfall, sonstige Einzelfälle), gibt es eine separate Vollabfrage aller
 **Laufzeit:** Bei 2 req/s ca. 36 Stunden. Der Lauf ist jederzeit unterbrechbar
 und fortsetzbar – abgefragte Wörter werden übersprungen.
 
+**Hinweis:** Nextcloud während der Abfrage pausieren, damit die temporäre
+Ausgabedatei nicht gesperrt wird.
+
 ```powershell
 # Erster Lauf (Standard: 2 req/s, Ausgabe in dwds/*-api.csv)
-uv run python tools/spellings/query_dwds_api.py
+uv run python tools/spellings/dwds/query_dwds_api.py
 
 # Schneller mit Pause alle 1000 Abfragen
-uv run python tools/spellings/query_dwds_api.py --rate-limit 5 --pause-every 1000 --pause-seconds 30
+uv run python tools/spellings/dwds/query_dwds_api.py --rate-limit 3 --pause-every 1000 --pause-seconds 30
 
 # Fortsetzung nach Abbruch (Output-Datei existiert bereits -> wird als Basis genommen)
-uv run python tools/spellings/query_dwds_api.py
+uv run python tools/spellings/dwds/query_dwds_api.py
 
 # Alle Wörter erneut abfragen (z. B. nach DWDS-Update)
-uv run python tools/spellings/query_dwds_api.py --requery
+uv run python tools/spellings/dwds/query_dwds_api.py --requery
 
 # Nur eine Teilmenge abfragen (Kandidaten-Index 0-basiert, Ende exklusiv)
-uv run python tools/spellings/query_dwds_api.py --start 0 --end 50000
-uv run python tools/spellings/query_dwds_api.py --start 50000 --end 100000
-uv run python tools/spellings/query_dwds_api.py --start 100000
+uv run python tools/spellings/dwds/query_dwds_api.py --start 0 --end 50000
+uv run python tools/spellings/dwds/query_dwds_api.py --start 50000 --end 100000
+uv run python tools/spellings/dwds/query_dwds_api.py --start 100000
 ```
 
 Die `--start`/`--end`-Indizes beziehen sich auf die gefilterte Kandidatenliste (nach Ausschluss
 von Mehrwortausdrücken, Affixen, bereits abgefragten Wörtern). Bei parallelen Teilläufen
-müssen die Ausgabe-Dateien unterschiedliche Namen haben; zusammenführen per
-`generate_spellings.py` oder manuell.
+müssen die Ausgabe-Dateien unterschiedliche Namen haben.
 
 ### Ausgabespalte `lemma-neu`
 
@@ -78,7 +77,7 @@ müssen die Ausgabe-Dateien unterschiedliche Namen haben; zusammenführen per
 
 ### Fehlerbehandlung
 
-Fehlgeschlagene Abfragen landen in `dwds_api_errors.csv`. Nach dem Hauptdurchlauf
+Fehlgeschlagene Abfragen landen in `dwds/dwds_api_errors.csv`. Nach dem Hauptdurchlauf
 werden sie automatisch erneut versucht. Nach 3 Fehlern (konfigurierbar mit
 `--max-failures`) wird ein Wort dauerhaft übersprungen. Die Fehlerdatei bleibt
 erhalten und wird beim nächsten Lauf eingelesen.
@@ -89,7 +88,7 @@ erhalten und wird beim nächsten Lauf eingelesen.
 |---|---|---|
 | `--input` | neueste `dwds/*.csv` | Eingabe-Lemmaliste |
 | `--output` | `dwds/*-api.csv` | Ausgabe (mit `lemma-neu`) |
-| `--errors` | `dwds_api_errors.csv` | Fehlerdatei |
+| `--errors` | `dwds/dwds_api_errors.csv` | Fehlerdatei |
 | `--requery` | aus | Bereits abgefragte Wörter erneut abfragen |
 | `--rate-limit` | 2.0 | Abfragen pro Sekunde |
 | `--pause-every` | 0 | Reguläre Pause nach N Abfragen (0 = keine) |
@@ -132,28 +131,21 @@ Getrenntschreibung (`soviel` → `so viel`), Vokaländerungen (`Gemse` → `Gäm
 `Stengel` → `Stängel`), h-Wegfall (`rauh` → `rau`) u. a.
 Supplement-Einträge haben bei Duplikaten Vorrang.
 
-### API-Validierung (`--api`)
+### API-Liste (`--list CSV`)
 
-Mit `--api` werden die algorithmisch ermittelten Kandidatenpaare per
-DWDS-API (`/api/wb/snippet/`) verifiziert. Die API gibt für jedes Wort die
-kanonische Schreibung zurück:
+Mit `--list` werden Paare direkt aus einer per `query_dwds_api.py` erzeugten
+CSV (Spalten `lemma` und `lemma-neu`) gebildet, statt die Heuristik zu verwenden.
+Das ist autoritativer, da die Neuformen direkt aus DWDS stammen.
 
-- `input == lemma` → Wort ist korrekt geschrieben (kein Paar; ß-Wörter → Whitelist)
-- `input != lemma` → Altschreibung bestätigt, `lemma` als Neuform übernommen
-
-`--rate-limit REQ/S` steuert die Anfragen pro Sekunde (Standard: 2, d. h.
-0,5 s Pause zwischen Anfragen). Bei ~4500 Paaren dauert die Validierung
-damit ca. 38 Minuten, bei `--rate-limit 5` ca. 15 Minuten.
-
-Schlägt eine API-Anfrage fehl, wird das heuristisch ermittelte Paar als
-Fallback beibehalten.
+- `lemma-neu != lemma` → Altschreibungspaar
+- `lemma-neu == lemma` → Schreibung korrekt; ß-Wörter kommen in Whitelist
+- `lemma-neu` leer oder `NOT_FOUND` → Zeile wird übersprungen
 
 ### Ausschlüsse (`EXCLUDE_FROM_PAIRS`)
 
-Im Offline-Modus (ohne `--api`) erzeugen einige Wörter algorithmisch falsche
-Paare, weil ihr ss- bzw. f-Pendant zufällig als anderes deutsches Wort in
-DWDS vorkommt. Mit `--api` werden diese Fälle automatisch erkannt (API gibt
-`input == lemma` zurück). Im Offline-Modus greift `EXCLUDE_FROM_PAIRS`:
+Einige Wörter erzeugen algorithmisch falsche Paare, weil ihr ss- bzw. f-Pendant
+zufällig als anderes deutsches Wort in DWDS vorkommt. `EXCLUDE_FROM_PAIRS`
+greift in beiden Modi (Heuristik und `--list`):
 
 | Alt | Falsch generiertes Neu | Grund |
 |---|---|---|
