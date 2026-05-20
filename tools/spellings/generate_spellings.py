@@ -5,12 +5,12 @@ Erzeugt spellings.csv (alt->neu-Paare) und whitelist.csv (korrekte ß-Woerter)
 aus der DWDS-Lemmaliste (tools/spellings/dwds/*.csv) plus supplement.csv
 (manuell gepflegte Eintraege fuer Getrenntschreibung, Sonstiges etc.).
 
-Algorithmus fuer ß->ss:
+Algorithmus fuer ß->ss (Heuristik, Standard):
   Fuer jedes Lemma aus DWDS das 'ß' enthaelt: Ersetze 'ß' durch 'ss'.
   Existiert die ss-Form ebenfalls in DWDS -> Altschreibung (Paar).
   Existiert sie nicht -> ß-Schreibung korrekt (Whitelist).
 
-Algorithmus fuer ph->f:
+Algorithmus fuer ph->f (Heuristik, Standard):
   Fuer jedes Lemma aus DWDS das 'ph' enthaelt: Ersetze 'ph' durch 'f'.
   Existiert die f-Form ebenfalls in DWDS -> Altschreibung (Paar).
   Existiert sie nicht -> ph-Schreibung bleibt (Physik, Philosophie etc.).
@@ -18,27 +18,22 @@ Algorithmus fuer ph->f:
 Whitelist:
   Alle DWDS-Lemmata mit 'ß', fuer die keine ss-Version in DWDS existiert.
 
-API-Validierung (--api):
-  Kandidatenpaare werden per DWDS /api/wb/snippet/ geprueft. Das Ergebnis
-  ist autoritativer als die Heuristik: falsche Paare (Maß/Mass) werden
-  automatisch erkannt, Neuformen direkt aus DWDS uebernommen.
-  Mit --rate-limit REQ/S laesst sich die Anfragerate steuern (Standard: 2.0).
+API-Liste (--list CSV):
+  Statt Heuristik: Paare direkt aus einer per query_dwds_api.py erzeugten
+  CSV mit den Spalten 'lemma' und 'lemma-neu' bilden.
+  Paar:      lemma-neu != lemma, nicht leer, nicht NOT_FOUND
+  Whitelist: ß-Woerter wo lemma-neu == lemma (korrekte Schreibung bestaetigt)
 
 Verwendung:
   uv run python tools/spellings/generate_spellings.py
-  uv run python tools/spellings/generate_spellings.py --api
-  uv run python tools/spellings/generate_spellings.py --api --rate-limit 5
+  uv run python tools/spellings/generate_spellings.py --list dwds/dwds_lemmata_2026-05-18-api.csv
 
 Abhaengigkeiten: keine externen (nur stdlib)
 """
 
 import argparse
 import csv
-import json
 import re
-import time
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -219,64 +214,38 @@ def write_whitelist(words: list[str]) -> None:
     print(f"  {len(unique)} Eintraege -> {WHITELIST_CSV.name}")
 
 
-# ── DWDS-API ───────────────────────────────────────────────────────────────
+# ── API-Liste ──────────────────────────────────────────────────────────────
 
 
-def query_dwds_canonical(word: str, timeout: float = 10.0) -> str | None:
+def load_api_list(path: Path) -> tuple[list[tuple[str, str]], list[str]]:
     """
-    Fragt DWDS /api/wb/snippet/ nach der kanonischen Schreibung.
-    Gibt das Lemma zurueck (kann gleich word sein = korrekte Schreibung),
-    oder None bei Netzwerkfehler / Wort nicht gefunden.
+    Laedt API-Ergebnisliste (Spalten: lemma, lemma-neu) und bildet Paare/Whitelist.
+
+    Paar:      lemma-neu != lemma, nicht leer, nicht NOT_FOUND
+    Whitelist: ß-Woerter wo lemma-neu == lemma (korrekte Schreibung bestaetigt)
+    Zeilen mit leerem lemma-neu (noch nicht abgefragt) werden uebersprungen.
     """
-    url = "https://www.dwds.de/api/wb/snippet/?q=" + urllib.parse.quote(word)
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "pdl-lt-dictconsistency/1.0"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        if not isinstance(data, list) or not data:
-            return None
-        for entry in data:
-            if entry.get("input") == word:
-                return entry.get("lemma") or None
-        return data[0].get("lemma") or None
-    except Exception:
-        return None
+    pairs: list[tuple[str, str]] = []
+    whitelist: list[str] = []
 
+    with open(path, encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            lemma = (row.get("lemma") or "").strip()
+            lemma_neu = (row.get("lemma-neu") or "").strip()
+            if not lemma or not lemma_neu or lemma_neu == "NOT_FOUND":
+                continue
+            if lemma in EXCLUDE_FROM_PAIRS:
+                if "ß" in lemma:
+                    whitelist.append(lemma)
+                continue
+            if lemma_neu == lemma:
+                if "ß" in lemma:
+                    whitelist.append(lemma)
+            else:
+                pairs.append((lemma, lemma_neu))
 
-def api_validate_pairs(
-    pairs: list[tuple[str, str]],
-    rate_limit: float,
-) -> tuple[list[tuple[str, str]], list[str]]:
-    """
-    Validiert Kandidatenpaare per DWDS-API.
-
-    Gibt zurueck:
-    - Bereinigte Paare (mit API-korrigierten Neuformen)
-    - Woerter, die laut API korrekt geschrieben sind (fuer Whitelist)
-    """
-    delay = 1.0 / rate_limit
-    validated: list[tuple[str, str]] = []
-    newly_correct: list[str] = []
-    fallback = 0
-
-    total = len(pairs)
-    for i, (alt, neu) in enumerate(pairs, 1):
-        print(f"\r  [{i}/{total}] {alt:<30}", end="", flush=True)
-        canonical = query_dwds_canonical(alt)
-        if canonical is None:
-            validated.append((alt, neu))
-            fallback += 1
-        elif canonical == alt:
-            newly_correct.append(alt)
-        else:
-            validated.append((alt, canonical))
-        time.sleep(delay)
-
-    print(
-        f"\r  {total} Paare geprueft: {len(validated)} bestaetigt/korrigiert, "
-        f"{len(newly_correct)} als korrekt erkannt, {fallback} Fallback (API nicht verfuegbar)."
-    )
-    return validated, newly_correct
+    return pairs, whitelist
 
 
 # ── Hauptprogramm ──────────────────────────────────────────────────────────
@@ -287,62 +256,50 @@ def main() -> None:
         description="Erzeugt spellings.csv und whitelist.csv aus DWDS-Lemmaliste."
     )
     parser.add_argument(
-        "--api",
-        action="store_true",
-        help="DWDS-API zur Validierung/Korrektur der Kandidatenpaare verwenden.",
-    )
-    parser.add_argument(
-        "--rate-limit",
-        type=float,
-        default=2.0,
-        metavar="REQ/S",
-        help="API-Anfragen pro Sekunde (Standard: 2.0). Nur mit --api wirksam.",
+        "--list",
+        metavar="CSV",
+        help="API-Ergebnisliste mit lemma/lemma-neu Spalten (aus query_dwds_api.py) "
+             "statt Heuristik verwenden.",
     )
     args = parser.parse_args()
 
     print("=== generate_spellings.py ===\n")
 
-    # 1. DWDS-Lemmaliste laden
-    print("Lade DWDS-Lemmaliste...")
-    dwds_words = load_dwds()
-
-    # 2. ß/ss-Paare und Whitelist aus DWDS erzeugen
-    print("\nErzeuge ß/ss-Paare aus DWDS...")
-    ss_pairs, whitelist_words = generate_ss_pairs(dwds_words)
-    print(f"  {len(ss_pairs)} Paare, {len(whitelist_words)} Whitelist-Eintraege.")
-
-    # 3. ph->f-Paare aus DWDS erzeugen
-    print("\nErzeuge ph->f-Paare aus DWDS...")
-    ph_pairs = generate_ph_pairs(dwds_words)
-    print(f"  {len(ph_pairs)} Paare.")
-
-    # 4. Dreifachkonsonanten-Paare aus DWDS erzeugen
-    print("\nErzeuge Dreifachkonsonanten-Paare aus DWDS...")
-    triple_pairs = generate_triple_pairs(dwds_words)
-    print(f"  {len(triple_pairs)} Paare.")
-
-    # 5. Optional: API-Validierung der Heuristik-Kandidaten
-    if args.api:
-        heuristic_pairs = ss_pairs + ph_pairs + triple_pairs
-        minutes = len(heuristic_pairs) / args.rate_limit / 60
-        print(
-            f"\nAPI-Validierung ({len(heuristic_pairs)} Paare, "
-            f"{args.rate_limit:.1f} req/s, ~{minutes:.0f} min) ..."
-        )
-        validated_pairs, newly_correct = api_validate_pairs(heuristic_pairs, args.rate_limit)
-        whitelist_words.extend(newly_correct)
-        base_pairs = validated_pairs
+    if args.list:
+        # Paare direkt aus API-Liste
+        list_path = Path(args.list)
+        if not list_path.is_absolute():
+            list_path = HERE / list_path
+        print(f"Lade API-Liste: {list_path.name} ...")
+        base_pairs, whitelist_words = load_api_list(list_path)
+        print(f"  {len(base_pairs)} Paare, {len(whitelist_words)} Whitelist-Eintraege.")
     else:
+        # Heuristik
+        print("Lade DWDS-Lemmaliste...")
+        dwds_words = load_dwds()
+
+        print("\nErzeuge ß/ss-Paare aus DWDS...")
+        ss_pairs, whitelist_words = generate_ss_pairs(dwds_words)
+        print(f"  {len(ss_pairs)} Paare, {len(whitelist_words)} Whitelist-Eintraege.")
+
+        print("\nErzeuge ph->f-Paare aus DWDS...")
+        ph_pairs = generate_ph_pairs(dwds_words)
+        print(f"  {len(ph_pairs)} Paare.")
+
+        print("\nErzeuge Dreifachkonsonanten-Paare aus DWDS...")
+        triple_pairs = generate_triple_pairs(dwds_words)
+        print(f"  {len(triple_pairs)} Paare.")
+
         base_pairs = ss_pairs + ph_pairs + triple_pairs
 
-    # 6. Supplement laden (Getrenntschreibung, Sonstiges etc.)
+    # Supplement laden (Getrenntschreibung, Sonstiges etc.)
     print("\nLade Supplement...")
     supplement = load_supplement()
 
-    # 7. Zusammenfuehren: Supplement am Ende -> bei Dedup Vorrang
+    # Zusammenfuehren: Supplement am Ende -> bei Dedup Vorrang
     all_pairs = base_pairs + supplement
 
-    # 8. Schreiben
+    # Schreiben
     print("\nSchreibe Ausgabe...")
     write_spellings(all_pairs)
     write_whitelist(whitelist_words)
