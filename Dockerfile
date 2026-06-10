@@ -33,4 +33,5 @@ EXPOSE 8000
 ENV REFLEX_ENV=prod
 
 # App starten
-CMD ["uv", "run", "reflex", "run", "--env", "prod"]
+# CMD ["uv", "run", "reflex", "run", "--env", "prod"]
+CMD ["sh", "-c", "uv run python index_data.py && uv run reflex run --env prod"]
