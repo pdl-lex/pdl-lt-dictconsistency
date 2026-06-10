@@ -30,7 +30,7 @@ PANEL_PADDING = "20px"
 PANEL_RADIUS = "5px"
 
 # Version
-APP_VERSION = "0.3"
+APP_VERSION = "0.4"
 
 
 # ============ Navigation ============

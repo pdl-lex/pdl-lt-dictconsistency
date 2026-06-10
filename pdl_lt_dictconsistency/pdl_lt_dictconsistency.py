@@ -115,6 +115,17 @@ def index() -> rx.Component:
                         rx.data_list.item(
                             rx.data_list.label(
                                 rx.badge(
+                                    "Alte Rechtschreibung",
+                                    variant="soft",
+                                )
+                                ),
+                            rx.data_list.value("Beliebige Tags können auf alte Rechtschreibung geprüft werden. Es wird eine Liste von falsch geschriebenen Wörtern mit Korrekturvorschlägen ausgegeben. Neben Fehlerkorrekturen werden auch Vereinheitlichungsvorschläge (DWDS als Referenz) bei mehreren erlaubten Schreibweisen gemacht."
+
+                            ),
+                        ),
+                        rx.data_list.item(
+                            rx.data_list.label(
+                                rx.badge(
                                     "LLM-Anfrage",
                                     variant="soft",
                                 )
