@@ -93,7 +93,7 @@ def index() -> rx.Component:
                         rx.data_list.item(
                             rx.data_list.label(
                                 rx.badge(
-                                    "Einmaligkeit",
+                                    "Verschachtelung",
                                     variant="soft",
                                 )
                                 ),
