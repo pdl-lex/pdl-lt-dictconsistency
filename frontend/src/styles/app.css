@@ -1,0 +1,36 @@
+/* Basis + Tabellen-Chrome (aus dem Design-Handoff übernommen). */
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: "Noto Sans", system-ui, sans-serif;
+  background: var(--lt-bg-1);
+  color: var(--lt-fg-1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+[data-theme="dark"] body { background: #0b0f0d; color: #e9efeb; }
+
+button { font-family: inherit; }
+input { font-family: inherit; }
+
+/* AG-Grid-mock: dezent an Quartz angelehnt, Tokens-gethemed */
+.agm-th { position: relative; }
+.agm-th:hover { background: var(--lt-bg-1) !important; }
+.agm-th:hover .agm-colmenu { opacity: 0.9 !important; }
+.agm-resizer {
+  position: absolute; top: 9px; bottom: 9px; right: 0; width: 9px;
+  cursor: col-resize;
+}
+.agm-resizer::after {
+  content: ""; position: absolute; right: 0; top: 0; bottom: 0;
+  width: 1px; background: transparent;
+}
+.agm-th:hover .agm-resizer::after { background: var(--lt-line-2); }
+.agm-row { transition: background .08s ease; }
+.agm-row:hover { background: var(--lt-bg-1); }
+
+/* Schlanke Scrollbalken im Werkzeug-Look */
+.cfg-scroll::-webkit-scrollbar, .agm-grid::-webkit-scrollbar { width: 10px; height: 10px; }
+.cfg-scroll::-webkit-scrollbar-thumb, .agm-grid::-webkit-scrollbar-thumb {
+  background: var(--lt-line-2); border-radius: 5px; border: 2px solid transparent; background-clip: content-box;
+}
