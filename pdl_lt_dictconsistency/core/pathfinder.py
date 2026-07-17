@@ -6,18 +6,23 @@ from typing import Iterable, Iterator
 
 from lxml import etree
 
-from .common import DEFAULT_CHUNK_SIZE, Progress
-from .source import XmlFileRef, get_quelle
+from .common import DEFAULT_CHUNK_SIZE, Progress, ensure_tag_name
+from .source import XmlFileRef, get_quelle, make_parser
 
 
 def parse_user_input(user_input: str) -> dict:
-    """Benutzereingabe in Suchparameter zerlegen (simple/path/wildcard)."""
+    """Benutzereingabe in Suchparameter zerlegen (simple/path/wildcard).
+
+    Wirft InvalidExpressionError bei Namen, die kein XML-Name sind.
+    """
     if "/" not in user_input:
-        return {"type": "simple", "elements": [user_input.lower().strip()]}
-    elif "*" not in user_input:
-        return {"type": "path", "elements": user_input.lower().strip().split("/")}
-    else:
-        return {"type": "wildcard", "elements": user_input.lower().strip().split("/")}
+        return {"type": "simple", "elements": [ensure_tag_name(user_input.lower())]}
+    kind = "path" if "*" not in user_input else "wildcard"
+    elements = [
+        e if e == "*" else ensure_tag_name(e)
+        for e in user_input.lower().strip().split("/")
+    ]
+    return {"type": kind, "elements": elements}
 
 
 def build_xpath(search_params: dict) -> str | None:
@@ -47,6 +52,7 @@ def run_pathfinder(
     """Alle Dateien nach dem Tag-/Pfadmuster durchsuchen."""
     xpath = build_xpath(parse_user_input(user_input))
     base = Path(base_path).expanduser()
+    parser = make_parser()
     refs = [f if isinstance(f, XmlFileRef) else XmlFileRef.from_dict(f) for f in files]
     files_checked = 0
 
@@ -58,7 +64,7 @@ def run_pathfinder(
             files_checked += 1
             try:
                 with open(ref.resolve(base), "rb") as f:
-                    doc = etree.parse(f)
+                    doc = etree.parse(f, parser)
                 quelle = get_quelle(doc.getroot(), ref.filename)
                 for elem in doc.xpath(xpath):
                     path_parts: list[str] = []

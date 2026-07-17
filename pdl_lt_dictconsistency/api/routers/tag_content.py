@@ -6,6 +6,7 @@ import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from ...core.common import InvalidExpressionError
 from ...core.tag_content import (
     collect_attr_values,
     collect_attrs,
@@ -56,17 +57,20 @@ def search(req: TagContentRequest) -> GenericCheckResponse:
     started = time.perf_counter()
     results: list[dict] = []
     files_checked = 0
-    for progress in run_tag_content_search(
-        files, base,
-        tags_to_search=req.tags_to_search,
-        search_text=req.search_text,
-        include_whitespace=req.include_whitespace,
-        attrs_to_filter=req.attrs_to_filter,
-        attr_value=req.attr_value,
-        is_single_tag_mode=req.is_single_tag_mode,
-    ):
-        results.extend(progress.results)
-        files_checked = progress.files_checked
+    try:
+        for progress in run_tag_content_search(
+            files, base,
+            tags_to_search=req.tags_to_search,
+            search_text=req.search_text,
+            include_whitespace=req.include_whitespace,
+            attrs_to_filter=req.attrs_to_filter,
+            attr_value=req.attr_value,
+            is_single_tag_mode=req.is_single_tag_mode,
+        ):
+            results.extend(progress.results)
+            files_checked = progress.files_checked
+    except InvalidExpressionError as e:
+        raise HTTPException(422, str(e)) from e
     return GenericCheckResponse(
         results=results, files_checked=files_checked, result_count=len(results),
         duration_ms=int((time.perf_counter() - started) * 1000),
@@ -82,12 +86,18 @@ def list_tags(req: FileSelection) -> TagsResponse:
 @router.post("/attrs", response_model=AttrsResponse)
 def list_attrs(req: AttrsRequest) -> AttrsResponse:
     base, files = resolve_files(req)
-    return AttrsResponse(attrs=collect_attrs(files, base, req.tags_filter))
+    try:
+        return AttrsResponse(attrs=collect_attrs(files, base, req.tags_filter))
+    except InvalidExpressionError as e:
+        raise HTTPException(422, str(e)) from e
 
 
 @router.post("/attr-values", response_model=AttrValuesResponse)
 def list_attr_values(req: AttrValuesRequest) -> AttrValuesResponse:
     base, files = resolve_files(req)
-    return AttrValuesResponse(
-        values=collect_attr_values(files, base, req.attrs_to_check, req.tags_filter)
-    )
+    try:
+        return AttrValuesResponse(
+            values=collect_attr_values(files, base, req.attrs_to_check, req.tags_filter)
+        )
+    except InvalidExpressionError as e:
+        raise HTTPException(422, str(e)) from e

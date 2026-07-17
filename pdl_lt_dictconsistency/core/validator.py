@@ -75,6 +75,8 @@ def run_validation(
             has_wf_error = False
             has_sc_error = False
             try:
+                # Bewusst der Standard-Parser: Entity-Auflösung gehört zur
+                # Wohlgeformtheitsprüfung (libxml2 begrenzt Entity-Expansion).
                 with open(ref.resolve(base), "rb") as f:
                     doc = etree.parse(f)
                 quelle = get_quelle(doc.getroot(), ref.filename)

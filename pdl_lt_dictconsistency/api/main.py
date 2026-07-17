@@ -37,8 +37,10 @@ app.add_middleware(
 )
 
 
-@app.get("/health", tags=["meta"])
+@app.get("/health", tags=["meta"], include_in_schema=False)
+@app.get("/api/health", tags=["meta"])
 def health() -> dict:
+    """Liveness-Check (auch unter /health, z. B. für Container-Healthchecks)."""
     return {"status": "ok"}
 
 

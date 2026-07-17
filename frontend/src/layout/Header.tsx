@@ -19,8 +19,9 @@ function iconChip(active: boolean): CSSProperties {
 }
 
 export function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
-  const { theme, toggleTheme, layout, setLayout, module } = useWorkbench()
+  const { theme, toggleTheme, layout, setLayout, module, activeId } = useWorkbench()
   const dark = theme === 'dark'
+  const title = activeId === 'api' ? 'API' : module.title
   return (
     <header style={{
       gridArea: 'head', display: 'flex', alignItems: 'center', background: 'var(--lt-bg-0)',
@@ -31,7 +32,7 @@ export function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
       <span style={{ color: 'var(--lt-fg-4)' }}>/</span>
       <span style={{ color: 'var(--lt-fg-3)', fontSize: 13 }}>Wörterbuchkonsistenzprüfung</span>
       <span style={{ color: 'var(--lt-fg-4)' }}>/</span>
-      <span style={{ color: 'var(--lt-fg-2)', fontSize: 13 }}>{module.title}</span>
+      <span style={{ color: 'var(--lt-fg-2)', fontSize: 13 }}>{title}</span>
 
       <span style={{ flex: 1 }} />
 

@@ -6,6 +6,9 @@ import { ResultsPane } from './layout/ResultsPane'
 import { StatusBar } from './layout/StatusBar'
 import { CommandPalette } from './layout/CommandPalette'
 import { DataDialog } from './layout/DataDialog'
+import { MobileWorkbench } from './layout/Mobile'
+import { ApiInfoConfigPane, ApiInfoMain } from './modules/apiInfo'
+import { useIsMobile } from './design/useIsMobile'
 import { WorkbenchProvider, useWorkbench } from './state/workbench'
 
 function gridFor(layout: string, railW: number): CSSProperties {
@@ -31,19 +34,30 @@ function gridFor(layout: string, railW: number): CSSProperties {
 }
 
 function Workbench() {
-  const { layout, railPinned, run, dataDialogOpen } = useWorkbench()
+  const { layout, railPinned, run, dataDialogOpen, activeId } = useWorkbench()
   const [cmdOpen, setCmdOpen] = useState(false)
+  const isMobile = useIsMobile()
   const railW = railPinned ? 248 : 56
+  const isApi = activeId === 'api'
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmdOpen((v) => !v) }
-      else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run() }
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); if (!isApi) run() }
       else if (e.key === 'Escape') setCmdOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [run])
+  }, [run, isApi])
+
+  if (isMobile) {
+    return (
+      <>
+        <MobileWorkbench />
+        {dataDialogOpen && <DataDialog />}
+      </>
+    )
+  }
 
   return (
     <div style={{
@@ -52,8 +66,8 @@ function Workbench() {
     }}>
       <Header onOpenPalette={() => setCmdOpen(true)} />
       <Rail />
-      <ConfigPane layout={layout} />
-      <ResultsPane />
+      {isApi ? <ApiInfoConfigPane layout={layout} /> : <ConfigPane layout={layout} />}
+      {isApi ? <ApiInfoMain /> : <ResultsPane />}
       <StatusBar />
       {cmdOpen && <CommandPalette onClose={() => setCmdOpen(false)} />}
       {dataDialogOpen && <DataDialog />}

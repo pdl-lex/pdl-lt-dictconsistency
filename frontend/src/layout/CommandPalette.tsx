@@ -16,6 +16,8 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
 
   const actions = useMemo<Action[]>(() => [
     ...MODULES.map((m): Action => ({ group: 'Module', icon: 'layers', label: `${m.label} öffnen`, run: () => wb.setActiveId(m.id) })),
+    { group: 'Module', icon: 'bolt', label: 'API-Referenz öffnen', run: () => wb.setActiveId('api') },
+    { group: 'Aktionen', icon: 'folder', label: 'Daten wählen…', run: () => wb.setDataDialogOpen(true) },
     { group: 'Aktionen', icon: 'play', label: 'Prüfung starten', run: () => wb.run() },
     { group: 'Aktionen', icon: wb.theme === 'dark' ? 'sun' : 'moon', label: wb.theme === 'dark' ? 'Heller Modus' : 'Dunkler Modus', run: () => wb.toggleTheme() },
     { group: 'Aktionen', icon: 'panelL', label: 'Layout · Konfiguration links', run: () => wb.setLayout('left') },

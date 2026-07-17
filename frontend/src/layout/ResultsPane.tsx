@@ -6,9 +6,9 @@ import { useWorkbench } from '../state/workbench'
 
 const PAGE_SIZE = 50
 
-function str(v: unknown): string { return v == null ? '' : String(v) }
+export function str(v: unknown): string { return v == null ? '' : String(v) }
 
-function aggregate(rows: Record<string, unknown>[], key: string, top = 7): SparkDatum[] {
+export function aggregate(rows: Record<string, unknown>[], key: string, top = 7): SparkDatum[] {
   const counts = new Map<string, number>()
   for (const r of rows) {
     const k = str(r[key])
@@ -18,7 +18,7 @@ function aggregate(rows: Record<string, unknown>[], key: string, top = 7): Spark
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, top).map(([name, count]) => ({ name, count }))
 }
 
-function toCsv(rows: Record<string, unknown>[], columns: Column[]): string {
+export function toCsv(rows: Record<string, unknown>[], columns: Column[]): string {
   const esc = (s: string) => /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   const head = columns.map((c) => esc(c.label)).join(';')
   const body = rows.map((r) => columns.map((c) => esc(str(r[c.key]))).join(';')).join('\n')

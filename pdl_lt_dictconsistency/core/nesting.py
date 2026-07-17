@@ -6,7 +6,7 @@ from typing import Iterable, Iterator
 
 from lxml import etree
 
-from .common import DEFAULT_CHUNK_SIZE, InvalidExpressionError, Progress
+from .common import DEFAULT_CHUNK_SIZE, InvalidExpressionError, Progress, ensure_tag_name
 from .source import XmlFileRef, get_quelle, make_parser
 
 MODES = ("Direkte Verschachtelung", "Beliebige Verschachtelung", "Pfad / Wildcard")
@@ -21,7 +21,7 @@ def pattern_to_xpath(pattern: str) -> str:
     parts = [p.strip() for p in pattern.strip().split("/") if p.strip()]
     xpath_parts = []
     for part in parts:
-        xpath_parts.append("*" if part == "*" else f"*[local-name()='{part}']")
+        xpath_parts.append("*" if part == "*" else f"*[local-name()='{ensure_tag_name(part)}']")
     return "//" + "/".join(xpath_parts) if xpath_parts else "//*"
 
 
@@ -81,7 +81,7 @@ def run_nesting(
         xpath = pattern_to_xpath(path_input)
         tag_name = ""
     else:
-        tag_name = tag_input.strip()
+        tag_name = ensure_tag_name(tag_input)
         xpath = f"//*[local-name()='{tag_name}']"
 
     base = Path(base_path).expanduser()

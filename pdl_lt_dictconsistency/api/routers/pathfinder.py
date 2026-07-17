@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
+from ...core.common import InvalidExpressionError
 from ...core.pathfinder import run_pathfinder
 from .._helpers import resolve_files, timed_response
 from ..schemas import FileSelection, GenericCheckResponse
@@ -20,4 +21,7 @@ def search_path(req: PathfinderRequest) -> GenericCheckResponse:
     if not req.user_input.strip():
         raise HTTPException(422, "Suchbegriff erforderlich.")
     base, files = resolve_files(req)
-    return timed_response(run_pathfinder(files, base, user_input=req.user_input))
+    try:
+        return timed_response(run_pathfinder(files, base, user_input=req.user_input))
+    except InvalidExpressionError as e:
+        raise HTTPException(422, str(e)) from e

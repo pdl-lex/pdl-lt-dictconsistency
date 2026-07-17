@@ -26,5 +26,11 @@ COPY --from=frontend /frontend/dist ./frontend/dist
 
 EXPOSE 8000
 
+# Auf dem Server dürfen Daten nur unter /mnt/data/wb/data liegen; Scan- und
+# Prüf-Endpunkte lehnen andere Pfade mit 403 ab (Upload-Sessions bleiben
+# erlaubt). Zur Laufzeit überschreibbar: docker run -e LT_DATA_ROOTS=…
+# Lokale Entwicklung (ohne Docker) bleibt unbeschränkt.
+ENV LT_DATA_ROOTS=/mnt/data/wb/data
+
 # FastAPI liefert API unter /api und das Frontend unter / aus.
 CMD ["uv", "run", "uvicorn", "pdl_lt_dictconsistency.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

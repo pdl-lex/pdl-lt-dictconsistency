@@ -174,8 +174,11 @@ export function defaultConfig(m: ModuleDef): Config {
   return c
 }
 
-/** Tag-Vorschläge für ein 'tags'-Feld laden. */
+/** Tag-Vorschläge für ein 'tags'-Feld laden.
+ *  Liefert der Endpunkt default_excluded (Rechtschreibung), werden diese
+ *  Tags nicht vorausgewählt — sie lassen sich manuell wieder hinzufügen. */
 export async function loadTags(path: string, directory: string): Promise<string[]> {
-  const r = await api.post<{ tags: string[] }>(path, { directory })
-  return r.tags
+  const r = await api.post<{ tags: string[]; default_excluded?: string[] }>(path, { directory })
+  const excluded = new Set(r.default_excluded ?? [])
+  return r.tags.filter((t) => !excluded.has(t))
 }

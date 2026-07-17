@@ -8,6 +8,7 @@ Reflex-App übernommen.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -24,6 +25,45 @@ UPLOADS_ROOT = Path(tempfile.gettempdir()) / "lt_uploads"
 # Datenquellen-Konfiguration und Projektwurzel.
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 DATASOURCES_FILE = _PROJECT_ROOT / "datasources.json"
+
+# Erlaubte Daten-Wurzelverzeichnisse (os.pathsep-getrennt, z. B.
+# LT_DATA_ROOTS=/mnt/data/wb/data). Nicht gesetzt = keine Beschränkung
+# (lokale Entwicklung); auf dem Server im Docker-Image gesetzt.
+DATA_ROOTS_ENV = "LT_DATA_ROOTS"
+
+
+def allowed_data_roots() -> list[Path] | None:
+    """Erlaubte Wurzeln aus LT_DATA_ROOTS; None = unbeschränkt."""
+    raw = os.environ.get(DATA_ROOTS_ENV, "").strip()
+    if not raw:
+        return None
+    return [Path(p).expanduser().resolve() for p in raw.split(os.pathsep) if p.strip()]
+
+
+def ensure_allowed_directory(directory: str | Path) -> Path:
+    """Verzeichnis auflösen und gegen LT_DATA_ROOTS prüfen.
+
+    Upload-Sessions (UPLOADS_ROOT) sind immer erlaubt. resolve() normalisiert
+    ../-Tricks und Symlinks. Wirft PermissionError bei Verstoß.
+    """
+    base = Path(directory).expanduser().resolve()
+    roots = allowed_data_roots()
+    if roots is None:
+        return base
+    for root in (*roots, UPLOADS_ROOT.resolve()):
+        if base.is_relative_to(root):
+            return base
+    raise PermissionError(
+        f"Zugriff außerhalb der erlaubten Datenverzeichnisse: {base}"
+    )
+
+
+def is_allowed_directory(directory: str | Path) -> bool:
+    try:
+        ensure_allowed_directory(directory)
+        return True
+    except PermissionError:
+        return False
 
 
 # ── Upload-Sessions ─────────────────────────────────────────────────────────
@@ -59,7 +99,11 @@ def is_valid_xml(file_path: Path) -> bool:
 
 
 def extract_zip(zip_path: Path, extract_to: Path) -> int:
-    """XML-Dateien aus ZIP extrahieren — mit Zip-Slip- und Zip-Bomb-Schutz."""
+    """XML-Dateien aus ZIP extrahieren — mit Zip-Slip- und Zip-Bomb-Schutz.
+
+    Das Größenlimit wird über die tatsächlich entpackten Bytes durchgesetzt
+    (die im ZIP-Header deklarierte Größe kann lügen).
+    """
     xml_count = 0
     total_size = 0
     try:
@@ -68,9 +112,6 @@ def extract_zip(zip_path: Path, extract_to: Path) -> int:
                 if ".." in member or member.startswith("/") or member.startswith("\\"):
                     print(f"SECURITY: dangerous path skipped: {member}")
                     continue
-                total_size += zip_ref.getinfo(member).file_size
-                if total_size > MAX_ZIP_EXTRACT_SIZE:
-                    raise ValueError(f"ZIP zu groß (>{MAX_ZIP_EXTRACT_SIZE // 1024 // 1024} MB)")
                 if not member.lower().endswith(".xml"):
                     continue
                 target = extract_to / Path(member)
@@ -78,8 +119,18 @@ def extract_zip(zip_path: Path, extract_to: Path) -> int:
                     print(f"SECURITY: path escape attempt: {member}")
                     continue
                 target.parent.mkdir(parents=True, exist_ok=True)
-                with zip_ref.open(member) as src, open(target, "wb") as dst:
-                    dst.write(src.read())
+                try:
+                    with zip_ref.open(member) as src, open(target, "wb") as dst:
+                        while chunk := src.read(1024 * 1024):
+                            total_size += len(chunk)
+                            if total_size > MAX_ZIP_EXTRACT_SIZE:
+                                raise ValueError(
+                                    f"ZIP zu groß (>{MAX_ZIP_EXTRACT_SIZE // 1024 // 1024} MB)"
+                                )
+                            dst.write(chunk)
+                except ValueError:
+                    target.unlink(missing_ok=True)
+                    raise
                 if is_valid_xml(target):
                     xml_count += 1
                 else:
@@ -194,5 +245,6 @@ def load_datasources() -> list[dict]:
             key = f"{key}_{seen[key]}"
         else:
             seen[key] = 0
-        result.append({"name": name, "path": str(resolved), "key": key, "exists": resolved.exists()})
+        usable = resolved.exists() and is_allowed_directory(resolved)
+        result.append({"name": name, "path": str(resolved), "key": key, "exists": usable})
     return result

@@ -7,8 +7,8 @@ from typing import Iterable, Iterator
 
 from lxml import etree
 
-from .common import DEFAULT_CHUNK_SIZE
-from .source import XmlFileRef, get_quelle
+from .common import DEFAULT_CHUNK_SIZE, ensure_tag_name
+from .source import XmlFileRef, get_quelle, make_parser
 
 
 @dataclass
@@ -50,10 +50,11 @@ def format_text_with_visible_whitespace(text: str) -> str:
 
 def _iter_docs(refs: list[XmlFileRef], base: Path):
     """Über (ref, doc) iterieren; Parse-Fehler überspringen."""
+    parser = make_parser()
     for ref in refs:
         try:
             with open(ref.resolve(base), "rb") as f:
-                yield ref, etree.parse(f)
+                yield ref, etree.parse(f, parser)
         except Exception as e:  # noqa: BLE001
             print(f"Error loading {ref.filename}: {e}")
             continue
@@ -82,6 +83,7 @@ def collect_attrs(
 ) -> list[str]:
     """Eindeutige Attributnamen der gewählten Tags sammeln."""
     base = Path(base_path).expanduser()
+    tags_filter = [ensure_tag_name(t) for t in tags_filter]
     attrs: set[str] = set()
     for _ref, doc in _iter_docs(_as_refs(files), base):
         for tag_name in tags_filter:
@@ -103,6 +105,7 @@ def collect_attr_values(
 ) -> list[str]:
     """Eindeutige Werte der gewählten Attribute (in gewählten Tags) sammeln."""
     base = Path(base_path).expanduser()
+    tags_filter = [ensure_tag_name(t) for t in tags_filter] if tags_filter else tags_filter
     values: set[str] = set()
     for _ref, doc in _iter_docs(_as_refs(files), base):
         if tags_filter:
@@ -135,8 +138,10 @@ def run_tag_content_search(
     attrs_to_filter = attrs_to_filter or []
     has_attr_filter = bool(attrs_to_filter)
     attr_value = attr_value.strip()
+    tags_to_search = [ensure_tag_name(t) for t in tags_to_search]
 
     base = Path(base_path).expanduser()
+    parser = make_parser()
     refs = _as_refs(files)
     files_checked = 0
 
@@ -149,7 +154,7 @@ def run_tag_content_search(
             files_checked += 1
             try:
                 with open(ref.resolve(base), "rb") as f:
-                    doc = etree.parse(f)
+                    doc = etree.parse(f, parser)
                 quelle = get_quelle(doc.getroot(), ref.filename)
 
                 for tag_name in tags_to_search:

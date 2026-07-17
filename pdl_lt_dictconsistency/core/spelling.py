@@ -13,7 +13,7 @@ from typing import Iterable, Iterator
 from lxml import etree
 
 from .common import DEFAULT_CHUNK_SIZE, Progress
-from .source import XmlFileRef, get_quelle
+from .source import XmlFileRef, get_quelle, make_parser
 
 CONTEXT_WINDOW = 40  # Zeichen links/rechts vom Treffer
 
@@ -108,12 +108,13 @@ _BUILTIN_PATTERN, _BUILTIN_LOOKUP = (
 def collect_text_bearing_tags(files: Iterable[XmlFileRef | dict], base_path: str | Path) -> list[str]:
     """Alle Tags mit nicht-leerem Textinhalt sammeln (sortiert)."""
     base = Path(base_path).expanduser()
+    parser = make_parser()
     refs = [f if isinstance(f, XmlFileRef) else XmlFileRef.from_dict(f) for f in files]
     tags: set[str] = set()
     for ref in refs:
         try:
             with open(ref.resolve(base), "rb") as f:
-                doc = etree.parse(f)
+                doc = etree.parse(f, parser)
         except Exception as e:  # noqa: BLE001
             print(f"Error loading tags from {ref.filename}: {e}")
             continue
@@ -167,6 +168,7 @@ def run_spelling(
     pattern, lookup = build_active_spellings(custom_spellings or [], custom_list_mode)
 
     base = Path(base_path).expanduser()
+    parser = make_parser()
     tags_to_search = set(included_tags)
     refs = [f if isinstance(f, XmlFileRef) else XmlFileRef.from_dict(f) for f in files]
     files_checked = 0
@@ -180,7 +182,7 @@ def run_spelling(
             try:
                 with open(ref.resolve(base), "rb") as fh:
                     raw = fh.read()
-                doc = etree.parse(io.BytesIO(raw))
+                doc = etree.parse(io.BytesIO(raw), parser)
                 file_lines = raw.decode("utf-8", errors="replace").splitlines()
                 quelle = get_quelle(doc.getroot(), ref.filename)
 

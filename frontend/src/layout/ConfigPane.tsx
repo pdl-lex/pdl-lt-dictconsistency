@@ -74,7 +74,7 @@ function TagsField({ field }: { field: Field }) {
   )
 }
 
-function FieldRenderer({ field }: { field: Field }) {
+export function FieldRenderer({ field }: { field: Field }) {
   const { config, setField } = useWorkbench()
   if (field.type === 'tags') return <TagsField field={field} />
 
@@ -119,7 +119,7 @@ function FieldRenderer({ field }: { field: Field }) {
   )
 }
 
-function DataCard() {
+export function DataCard() {
   const { directory, fileCount, setDataDialogOpen } = useWorkbench()
   return (
     <div style={card}>

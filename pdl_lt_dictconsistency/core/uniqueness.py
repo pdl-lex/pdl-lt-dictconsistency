@@ -13,7 +13,7 @@ from typing import Iterable, Iterator
 
 from lxml import etree
 
-from .common import DEFAULT_CHUNK_SIZE, Progress
+from .common import DEFAULT_CHUNK_SIZE, Progress, ensure_tag_name
 from .source import XmlFileRef, get_quelle, make_parser
 
 MODES = ("Tag", "Tag-Inhalt", "Tag & Attribut", "Attribut")
@@ -127,7 +127,8 @@ def run_uniqueness(
 
     base = Path(base_path).expanduser()
     parser = make_parser()
-    tag_name = tag_name.strip()
+    # tag_name landet in XPath-Ausdrücken, attribute_name nicht (Python-Vergleich).
+    tag_name = ensure_tag_name(tag_name) if tag_name.strip() else ""
     attribute_name = attribute_name.strip()
 
     refs = [f if isinstance(f, XmlFileRef) else XmlFileRef.from_dict(f) for f in files]

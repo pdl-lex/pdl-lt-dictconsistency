@@ -1,12 +1,11 @@
 """API-Endpunkte für Daten-Ingest: Upload, Verzeichnis-Scan, Datenquellen."""
 from __future__ import annotations
 
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from ...core import data
+from .._helpers import resolve_directory
 
 router = APIRouter(prefix="/data", tags=["data"])
 
@@ -40,10 +39,11 @@ def datasources() -> list[Datasource]:
 
 @router.post("/scan", response_model=DatasetResponse)
 def scan_directory(req: ScanRequest) -> DatasetResponse:
-    """Serverseitiges Verzeichnis (Server-Pfad oder Datenquelle) scannen."""
-    base = Path(req.directory).expanduser()
-    if not base.is_dir():
-        raise HTTPException(404, f"Verzeichnis nicht gefunden: {base}")
+    """Serverseitiges Verzeichnis (Server-Pfad oder Datenquelle) scannen.
+
+    Mit gesetztem LT_DATA_ROOTS sind nur Pfade unterhalb der erlaubten
+    Wurzeln (und Upload-Sessions) zulässig — sonst 403."""
+    base = resolve_directory(req.directory)
     files = data.scan(base)
     return DatasetResponse(directory=str(base), file_count=len(files), files=files)
 

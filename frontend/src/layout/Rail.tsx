@@ -13,7 +13,8 @@ const RAIL_ICON: Record<string, IconName> = {
 function buildMenu(): MenuGroup[] {
   const order = ['Start', 'XML', 'Stil und Schreibung', 'LLM']
   const staticItems: Record<string, MenuItem[]> = {
-    Start: [{ id: 'intro', label: 'Einführung', disabled: true }, { id: 'data', label: 'Daten' }],
+    Start: [{ id: 'intro', label: 'Einführung', disabled: true }, { id: 'data', label: 'Daten' },
+      { id: 'api', label: 'API' }],
     LLM: [{ id: 'chat', label: 'Chat', disabled: true }, { id: 'ocr', label: 'Texterkennung (OCR)', disabled: true },
       { id: 'settings', label: 'LLM-Einstellungen', disabled: true }],
   }
@@ -23,7 +24,7 @@ function buildMenu(): MenuGroup[] {
   }))
 }
 
-const MENU = buildMenu()
+export const MENU = buildMenu()
 
 function railRow(active: boolean): CSSProperties {
   return {

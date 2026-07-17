@@ -7,15 +7,26 @@ from typing import Iterable, Iterator
 
 from fastapi import HTTPException
 
+from ..core.data import ensure_allowed_directory
 from ..core.source import scan_xml_files
 from .schemas import FileSelection, GenericCheckResponse
 
 
+def resolve_directory(directory: str) -> Path:
+    """Verzeichnis auflösen, gegen LT_DATA_ROOTS prüfen (403) und auf
+    Existenz prüfen (404). Einziger Eintrittspunkt für `directory`-Eingaben."""
+    try:
+        base = ensure_allowed_directory(directory)
+    except PermissionError as e:
+        raise HTTPException(403, str(e)) from e
+    if not base.is_dir():
+        raise HTTPException(404, f"Verzeichnis nicht gefunden: {base}")
+    return base
+
+
 def resolve_files(req: FileSelection) -> tuple[Path, list]:
     """Basisverzeichnis prüfen und Dateiliste bestimmen (explizit oder Scan)."""
-    base = Path(req.directory).expanduser()
-    if not base.exists():
-        raise HTTPException(404, f"Verzeichnis nicht gefunden: {base}")
+    base = resolve_directory(req.directory)
     files = req.files if req.files is not None else scan_xml_files(base)
     return base, files
 

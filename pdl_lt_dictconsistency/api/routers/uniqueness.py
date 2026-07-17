@@ -6,13 +6,13 @@ auch die Reflex-Oberfläche konsumiert.
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
-from ...core.source import scan_xml_files
+from ...core.common import InvalidExpressionError
 from ...core.uniqueness import MODES, run_uniqueness
+from .._helpers import resolve_files
 from ..schemas import CheckResponse, FileSelection
 
 router = APIRouter(prefix="/checks", tags=["checks"])
@@ -38,22 +38,20 @@ class UniquenessRequest(FileSelection):
 @router.post("/uniqueness", response_model=CheckResponse)
 def check_uniqueness(req: UniquenessRequest) -> CheckResponse:
     req.validate_inputs()
-
-    base = Path(req.directory).expanduser()
-    if not base.exists():
-        raise HTTPException(404, f"Verzeichnis nicht gefunden: {base}")
-
-    files = req.files if req.files is not None else scan_xml_files(base)
+    base, files = resolve_files(req)
 
     started = time.perf_counter()
     results: list[dict] = []
     files_checked = 0
-    for progress in run_uniqueness(
-        files, base,
-        mode=req.mode, tag_name=req.tag_name, attribute_name=req.attribute_name,
-    ):
-        files_checked = progress.files_checked
-        results.extend(progress.results)
+    try:
+        for progress in run_uniqueness(
+            files, base,
+            mode=req.mode, tag_name=req.tag_name, attribute_name=req.attribute_name,
+        ):
+            files_checked = progress.files_checked
+            results.extend(progress.results)
+    except InvalidExpressionError as e:
+        raise HTTPException(422, str(e)) from e
     duration_ms = int((time.perf_counter() - started) * 1000)
 
     return CheckResponse(
