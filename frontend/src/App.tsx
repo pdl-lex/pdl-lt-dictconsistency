@@ -6,9 +6,12 @@ import { ResultsPane } from './layout/ResultsPane'
 import { StatusBar } from './layout/StatusBar'
 import { CommandPalette } from './layout/CommandPalette'
 import { DataDialog } from './layout/DataDialog'
+import { LoginGate } from './layout/LoginGate'
+import { AdminConfigPane, AdminMain } from './layout/AdminView'
 import { MobileWorkbench } from './layout/Mobile'
 import { ApiInfoConfigPane, ApiInfoMain } from './modules/apiInfo'
 import { useIsMobile } from './design/useIsMobile'
+import { AuthProvider, useAuth } from './state/auth'
 import { WorkbenchProvider, useWorkbench } from './state/workbench'
 
 function gridFor(layout: string, railW: number): CSSProperties {
@@ -39,16 +42,17 @@ function Workbench() {
   const isMobile = useIsMobile()
   const railW = railPinned ? 248 : 56
   const isApi = activeId === 'api'
+  const isAdmin = activeId === 'admin'
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmdOpen((v) => !v) }
-      else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); if (!isApi) run() }
+      else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); if (!isApi && !isAdmin) run() }
       else if (e.key === 'Escape') setCmdOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [run, isApi])
+  }, [run, isApi, isAdmin])
 
   if (isMobile) {
     return (
@@ -66,8 +70,8 @@ function Workbench() {
     }}>
       <Header onOpenPalette={() => setCmdOpen(true)} />
       <Rail />
-      {isApi ? <ApiInfoConfigPane layout={layout} /> : <ConfigPane layout={layout} />}
-      {isApi ? <ApiInfoMain /> : <ResultsPane />}
+      {isAdmin ? <AdminConfigPane layout={layout} /> : isApi ? <ApiInfoConfigPane layout={layout} /> : <ConfigPane layout={layout} />}
+      {isAdmin ? <AdminMain /> : isApi ? <ApiInfoMain /> : <ResultsPane />}
       <StatusBar />
       {cmdOpen && <CommandPalette onClose={() => setCmdOpen(false)} />}
       {dataDialogOpen && <DataDialog />}
@@ -75,10 +79,21 @@ function Workbench() {
   )
 }
 
-export default function App() {
+function Gate() {
+  const { user, loading } = useAuth()
+  if (loading) return <div style={{ width: '100%', height: '100%', background: 'var(--lt-bg-1)' }} />
+  if (!user) return <LoginGate />
   return (
     <WorkbenchProvider>
       <Workbench />
     </WorkbenchProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
   )
 }

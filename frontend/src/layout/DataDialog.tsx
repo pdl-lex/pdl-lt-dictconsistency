@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Icon } from '../design/icons'
 import { Segmented } from '../design/widgets'
-import { dataApi, type Datasource } from '../api/client'
+import { dataApi, type Datasource, type WbdbResource } from '../api/client'
 import { useWorkbench } from '../state/workbench'
 
 const card: CSSProperties = {
@@ -19,7 +19,7 @@ const btnPrimary: CSSProperties = {
   height: 34, padding: '0 14px', borderRadius: 'var(--lt-r-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
 }
 
-type Mode = 'Server-Pfad' | 'Upload' | 'Vorliegende Daten'
+type Mode = 'Server-Pfad' | 'Upload' | 'Vorliegende Daten' | 'Datenbank'
 
 export function DataDialog() {
   const { setDataDialogOpen, applyDataset, directory } = useWorkbench()
@@ -77,6 +77,26 @@ export function DataDialog() {
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
   }
 
+  // ── Datenbank (wbdb) ──
+  const [dbResources, setDbResources] = useState<WbdbResource[] | null>(null)
+  const [selectedResources, setSelectedResources] = useState<string[]>([])
+  useEffect(() => {
+    if (mode === 'Datenbank' && dbResources === null) {
+      dataApi.dbResources().then(setDbResources).catch((e) => setError(String(e)))
+    }
+  }, [mode, dbResources])
+  const toggleResource = (id: string) => {
+    setSelectedResources((prev) => (prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]))
+  }
+  const loadDbSelection = async () => {
+    if (selectedResources.length === 0) return
+    setBusy(true); setError(''); setInfo('')
+    try {
+      const ds = await dataApi.loadDbResource(selectedResources)
+      finish(ds.directory, ds.file_count, `${ds.file_count} Artikel aus der Datenbank geladen. „Schließen", um zu prüfen.`)
+    } catch (e) { setError(String(e)) } finally { setBusy(false) }
+  }
+
   return (
     <div onClick={close} style={{
       position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(8,12,10,0.42)', backdropFilter: 'blur(1.5px)',
@@ -93,7 +113,7 @@ export function DataDialog() {
         </div>
 
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Segmented options={['Server-Pfad', 'Upload', 'Vorliegende Daten']} value={mode} onChange={(v) => { setMode(v as Mode); setError(''); setInfo('') }} />
+          <Segmented options={['Server-Pfad', 'Upload', 'Vorliegende Daten', 'Datenbank']} value={mode} onChange={(v) => { setMode(v as Mode); setError(''); setInfo('') }} />
 
           {mode === 'Server-Pfad' && (
             <div style={card}>
@@ -130,6 +150,31 @@ export function DataDialog() {
                     <span style={{ fontSize: 10, fontFamily: 'var(--lt-font-mono)', color: 'var(--lt-fg-4)' }}>{s.exists ? s.path : 'nicht gefunden'}</span>
                   </button>
                 ))}
+            </div>
+          )}
+
+          {mode === 'Datenbank' && (
+            <div style={{ ...card, padding: 8 }}>
+              {dbResources === null ? <div style={{ padding: 12, fontSize: 12, color: 'var(--lt-fg-3)' }}>Lädt…</div>
+                : dbResources.length === 0 ? <div style={{ padding: 12, fontSize: 12, color: 'var(--lt-fg-3)' }}>Keine Wörterbücher freigegeben.</div>
+                : <>
+                  {dbResources.map((r) => (
+                    <label key={r.resource_id} style={{
+                      width: '100%', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '9px 10px', cursor: 'pointer', borderRadius: 'var(--lt-r-sm)', color: 'var(--lt-fg-1)',
+                    }}>
+                      <input type="checkbox" checked={selectedResources.includes(r.resource_id)} onChange={() => toggleResource(r.resource_id)} />
+                      <Icon name="book" size={15} style={{ color: 'var(--lt-primary)' }} />
+                      <span style={{ flex: 1, fontSize: 13 }}>{r.resource_id}</span>
+                      <span style={{ fontSize: 10, fontFamily: 'var(--lt-font-mono)', color: 'var(--lt-fg-4)' }}>{r.article_count} Artikel</span>
+                    </label>
+                  ))}
+                  <div style={{ padding: '8px 2px 2px' }}>
+                    <button onClick={loadDbSelection} disabled={busy || selectedResources.length === 0} style={{ ...btnPrimary, width: '100%' }}>
+                      {busy ? '…' : `Laden${selectedResources.length ? ` (${selectedResources.length})` : ''}`}
+                    </button>
+                  </div>
+                </>}
             </div>
           )}
 

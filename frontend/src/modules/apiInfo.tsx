@@ -101,7 +101,7 @@ export function ApiInfoConfig() {
         <div style={{ fontSize: 11.5, color: 'var(--lt-fg-3)', lineHeight: 1.7, fontFamily: 'var(--lt-font-mono)' }}>
           <div style={{ wordBreak: 'break-all' }}>Basis: {BASE}/api</div>
           <div>Format: JSON (Upload: multipart)</div>
-          <div>Auth: keine</div>
+          <div>Auth: Cookie-Session (POST /api/auth/login)</div>
         </div>
       </div>
       <div style={card}>
@@ -115,6 +115,11 @@ export function ApiInfoConfig() {
         Alle Prüfungen erwarten ein serverseitiges <code>directory</code> — entweder ein bekannter
         Server-Pfad, eine Datenquelle aus <code>GET /api/data/datasources</code> oder das Ergebnis
         eines Uploads (<code>POST /api/data/upload</code>).
+      </Callout>
+      <Callout icon="user">
+        Alle Endpunkte außer <code>/api/auth/*</code> und <code>/api/health</code> verlangen eine
+        angemeldete Session (Cookie <code>lt_session</code>, per <code>POST /api/auth/login</code>);
+        ohne gültige Session antworten sie mit 401.
       </Callout>
     </div>
   )
@@ -178,13 +183,36 @@ export function ApiInfoMain() {
         </div>
 
         <Callout icon="bolt">
-          Alle Endpunkte liegen unter <code>{BASE}/api</code>, Antworten sind JSON, eine
-          Authentifizierung ist nicht erforderlich. Fehler kommen als HTTP-Status
-          (403 = Pfad außerhalb der erlaubten Datenwurzeln, 404 = Verzeichnis/Session unbekannt,
-          422 = ungültige Eingabe, 500 = interner Fehler)
-          mit Body <code>{'{"detail": "…"}'}</code>. Prüfungen antworten einheitlich mit:
+          Alle Endpunkte liegen unter <code>{BASE}/api</code>, Antworten sind JSON. Bis auf{' '}
+          <code>/auth/*</code> und <code>/health</code> ist eine angemeldete Session nötig
+          (Cookie <code>lt_session</code>, siehe <code>POST /api/auth/login</code> unten). Fehler
+          kommen als HTTP-Status (401 = nicht angemeldet, 403 = Pfad außerhalb der erlaubten
+          Datenwurzeln, 404 = Verzeichnis/Session unbekannt, 422 = ungültige Eingabe,
+          500 = interner Fehler) mit Body <code>{'{"detail": "…"}'}</code>. Prüfungen antworten
+          einheitlich mit:
           <div style={{ marginTop: 8 }}><CodeBlock code={genericResponse} /></div>
         </Callout>
+
+        <Endpoint method="POST" path="/api/auth/login">
+          <p style={p0}>
+            Anmelden. Setzt bei Erfolg das Session-Cookie <code>lt_session</code>{' '}
+            (<code>HttpOnly</code>, 14 Tage gültig); alle weiteren Anfragen im selben Browser
+            senden es automatisch mit.
+          </p>
+          <CodeBlock label="Anfrage" code={`curl -X POST ${BASE}/api/auth/login -c cookies.txt \\
+  -H "Content-Type: application/json" \\
+  -d '{"username": "…", "password": "…"}'`} />
+        </Endpoint>
+
+        <Endpoint method="GET" path="/api/auth/me">
+          <p style={p0}>Angemeldeten Nutzer abfragen (Username, wbdb-Principal, Admin-Status).</p>
+          <CodeBlock label="Anfrage" code={`curl ${BASE}/api/auth/me -b cookies.txt`} />
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/auth/logout">
+          <p style={p0}>Abmelden — löscht die Session serverseitig und das Cookie.</p>
+          <CodeBlock label="Anfrage" code={`curl -X POST ${BASE}/api/auth/logout -b cookies.txt`} />
+        </Endpoint>
 
         <Endpoint method="POST" path="/api/data/scan">
           <p style={p0}>

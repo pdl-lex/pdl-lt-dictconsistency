@@ -7,7 +7,7 @@ export type IconName =
   | 'table' | 'file' | 'folder' | 'book' | 'flask' | 'command' | 'bolt'
   | 'refresh' | 'dot' | 'diamond' | 'sparkle' | 'pin'
   | 'panelL' | 'panelR' | 'panelB' | 'panelT' | 'layers'
-  | 'menu' | 'chart'
+  | 'menu' | 'chart' | 'user' | 'logout' | 'shield'
 
 const PATHS: Record<IconName, JSX.Element> = {
   search: <><circle cx="7" cy="7" r="4.5" /><path d="M10.5 10.5 14 14" /></>,
@@ -43,6 +43,9 @@ const PATHS: Record<IconName, JSX.Element> = {
   layers: <><path d="M8 1.5 1.5 5 8 8.5 14.5 5z" /><path d="M1.5 8 8 11.5 14.5 8" /><path d="M1.5 11 8 14.5 14.5 11" /></>,
   menu: <><path d="M2.5 4.5h11" /><path d="M2.5 8h11" /><path d="M2.5 11.5h11" /></>,
   chart: <><path d="M2 13.5h12" /><path d="M4 13V8" /><path d="M8 13V4" /><path d="M12 13V6.5" /></>,
+  user: <><circle cx="8" cy="5.5" r="3" /><path d="M2.5 14c0-3 2.5-5 5.5-5s5.5 2 5.5 5" /></>,
+  logout: <><path d="M6.5 14H3.5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h3" /><path d="M10.5 11 14 8l-3.5-3" /><path d="M14 8H6" /></>,
+  shield: <><path d="M8 1.5 13.5 3.5V7.5c0 4-2.3 6-5.5 7-3.2-1-5.5-3-5.5-7V3.5z" /><path d="M5.5 8 7.3 9.8 10.5 6" /></>,
 }
 
 export function Icon({

@@ -1,7 +1,7 @@
-"""Daten-Ingest — Upload (XML/ZIP), Verzeichnis-Scan, Datenquellen.
+"""Daten-Ingest — Upload (XML/ZIP), Verzeichnis-Scan, Datenquellen, wbdb-Ressourcen.
 
-Reflex-frei. Erzeugt aus Uploads oder vorhandenen Verzeichnissen ein
-serverseitiges Verzeichnis, auf das die Prüfungen via `directory` zeigen.
+Reflex-frei. Erzeugt aus Uploads, vorhandenen Verzeichnissen oder wbdb-Bestand
+ein serverseitiges Verzeichnis, auf das die Prüfungen via `directory` zeigen.
 Sicherheitslogik (Zip-Slip, Größenlimits, XML-Magic-Bytes) aus der früheren
 Reflex-App übernommen.
 """
@@ -202,6 +202,56 @@ def clear_session(session_id: str) -> None:
     """Eine Upload-Session löschen."""
     path = session_path(session_id)
     shutil.rmtree(path, ignore_errors=True)
+
+
+# ── wbdb-Ressourcen ─────────────────────────────────────────────────────────
+
+_MATERIALIZE_QUERY = """
+    SELECT a.article_id, a.resource_id, a.source_path, o.content
+    FROM source.article a
+    JOIN source.document o USING (content_sha256)
+    WHERE a.resource_id = ANY(%s)
+"""
+
+
+def materialize_db_resource(resource_ids: list[str], *, principal: str) -> dict:
+    """Artikel aus wbdb (source.document, BDO-XML) in eine neue Upload-Session
+    schreiben — danach ist es aus Sicht der Prüfungen ein ganz normales
+    `directory`, wie ein Server-Pfad oder Upload.
+
+    Dateiname = `source_path` (eindeutig innerhalb des aktuellen Imports;
+    `article_id` ist es nicht, siehe WBDB-Doku §9). DB-Inhalt ist
+    vertrauenswürdig — anders als bei Uploads gelten hier keine
+    Größenlimits/Magic-Byte-Prüfung, wohl aber dieselbe
+    Pfad-Escape-Absicherung wie bei `extract_zip`.
+    """
+    from ..wbdb.connection import als, verbindung  # lazy: core bleibt ohne wbdb nutzbar
+
+    session_id, dest = new_session()
+    dest_resolved = dest.resolve()
+    file_count = 0
+
+    with verbindung() as conn, als(conn, principal):
+        with conn.cursor(name=f"materialize_{session_id}") as cur:
+            cur.itersize = 200
+            cur.execute(_MATERIALIZE_QUERY, (resource_ids,))
+            for article_id, resource_id, source_path, content in cur:
+                target = (dest / source_path).resolve()
+                if not target.is_relative_to(dest_resolved):
+                    print(f"SECURITY: source_path escape attempt: {source_path!r} ({article_id})")
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(bytes(content))
+                file_count += 1
+
+    scanned = scan(dest)
+    return {
+        "directory": str(dest),
+        "file_count": len(scanned),
+        "files": scanned,
+        "session_id": session_id,
+        "errors": [] if file_count else ["Keine Artikel für die gewählten Wörterbücher gefunden."],
+    }
 
 
 # ── Datenquellen (datasources.json) ─────────────────────────────────────────

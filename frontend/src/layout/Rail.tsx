@@ -1,30 +1,30 @@
-import { useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { Icon, type IconName } from '../design/icons'
 import { MODULES } from '../modules/registry'
+import { useAuth } from '../state/auth'
 import { useWorkbench } from '../state/workbench'
 
 interface MenuItem { id: string; label: string; disabled?: boolean }
 interface MenuGroup { group: string; icon: IconName; items: MenuItem[] }
 
 const RAIL_ICON: Record<string, IconName> = {
-  Start: 'folder', XML: 'layers', 'Stil und Schreibung': 'book', LLM: 'flask',
+  Start: 'folder', XML: 'layers', 'Stil und Schreibung': 'book', LLM: 'flask', Verwaltung: 'shield',
 }
 
-function buildMenu(): MenuGroup[] {
-  const order = ['Start', 'XML', 'Stil und Schreibung', 'LLM']
+export function buildMenu(isAdmin: boolean): MenuGroup[] {
+  const order = ['Start', 'XML', 'Stil und Schreibung', 'LLM', ...(isAdmin ? ['Verwaltung'] : [])]
   const staticItems: Record<string, MenuItem[]> = {
     Start: [{ id: 'intro', label: 'Einführung', disabled: true }, { id: 'data', label: 'Daten' },
       { id: 'api', label: 'API' }],
     LLM: [{ id: 'chat', label: 'Chat', disabled: true }, { id: 'ocr', label: 'Texterkennung (OCR)', disabled: true },
       { id: 'settings', label: 'LLM-Einstellungen', disabled: true }],
+    Verwaltung: [{ id: 'admin', label: 'Admin-Bereich' }],
   }
   return order.map((group) => ({
     group, icon: RAIL_ICON[group],
     items: staticItems[group] ?? MODULES.filter((m) => m.group === group).map((m) => ({ id: m.id, label: m.label })),
   }))
 }
-
-export const MENU = buildMenu()
 
 function railRow(active: boolean): CSSProperties {
   return {
@@ -87,8 +87,10 @@ function RailGroup({ g, open, onToggle }: { g: MenuGroup; open: boolean; onToggl
 
 export function Rail() {
   const { railPinned, setRailPinned, activeId } = useWorkbench()
+  const { user } = useAuth()
+  const menu = useMemo(() => buildMenu(!!user?.is_admin), [user])
   const [hover, setHover] = useState(false)
-  const activeGroup = MENU.find((g) => g.items.some((it) => it.id === activeId))?.group ?? MENU[0].group
+  const activeGroup = menu.find((g) => g.items.some((it) => it.id === activeId))?.group ?? menu[0].group
   const [openGroup, setOpenGroup] = useState<string | null>(activeGroup)
   const expanded = railPinned || hover
 
@@ -102,7 +104,7 @@ export function Rail() {
           width: 56, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center',
           padding: '12px 0 10px', gap: 4, boxSizing: 'border-box', cursor: 'pointer',
         }}>
-          {MENU.map((g) => (
+          {menu.map((g) => (
             <RailGlyph key={g.group} icon={g.icon} label={g.group} active={g.group === activeGroup} count={g.items.length} />
           ))}
           <span style={{ flex: 1 }} />
@@ -136,7 +138,7 @@ export function Rail() {
         </div>
 
         <div style={{ overflowY: 'auto', flex: 1, padding: '8px' }}>
-          {MENU.map((g) => (
+          {menu.map((g) => (
             <RailGroup key={g.group} g={g} open={openGroup === g.group}
               onToggle={() => setOpenGroup(openGroup === g.group ? null : g.group)} />
           ))}

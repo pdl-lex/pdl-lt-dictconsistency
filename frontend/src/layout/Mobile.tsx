@@ -7,10 +7,12 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Icon, Logo, type IconName } from '../design/icons'
 import { Diff, Sparkbars, type SparkDatum } from '../design/widgets'
 import { ApiInfoConfig, ApiInfoMain } from '../modules/apiInfo'
+import { AdminConfig, AdminMain } from './AdminView'
 import type { Column } from '../modules/registry'
+import { useAuth } from '../state/auth'
 import { useWorkbench } from '../state/workbench'
 import { DataCard, FieldRenderer } from './ConfigPane'
-import { MENU } from './Rail'
+import { buildMenu } from './Rail'
 import { aggregate, str, toCsv } from './ResultsPane'
 
 const CARD_PAGE = 30
@@ -95,7 +97,9 @@ function MobileMenu({ open, onClose, order, setOrder }: {
   open: boolean; onClose: () => void; order: Order; setOrder: (o: Order) => void
 }) {
   const { activeId, setActiveId, setDataDialogOpen, theme, toggleTheme } = useWorkbench()
-  const activeGroup = MENU.find((g) => g.items.some((it) => it.id === activeId))?.group ?? null
+  const { user, logout } = useAuth()
+  const menu = useMemo(() => buildMenu(!!user?.is_admin), [user])
+  const activeGroup = menu.find((g) => g.items.some((it) => it.id === activeId))?.group ?? null
   const [openGroup, setOpenGroup] = useState<string | null>(activeGroup)
 
   const pick = (id: string) => {
@@ -132,7 +136,7 @@ function MobileMenu({ open, onClose, order, setOrder }: {
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
           <MenuLabel>Navigation</MenuLabel>
-          {MENU.map((g) => {
+          {menu.map((g) => {
             const hasActive = g.items.some((it) => it.id === activeId)
             const isOpen = openGroup === g.group
             return (
@@ -160,6 +164,15 @@ function MobileMenu({ open, onClose, order, setOrder }: {
           <MenuLabel>Darstellung</MenuLabel>
           <MenuToggle icon={theme === 'dark' ? 'moon' : 'sun'} label="Dunkler Modus"
             on={theme === 'dark'} onChange={() => toggleTheme()} />
+
+          {user && (
+            <>
+              <div style={{ height: 1, background: 'var(--lt-line-1)', margin: '10px 0' }} />
+              <MenuLabel>Konto</MenuLabel>
+              <MenuRow icon="user" label={user.username} />
+              <MenuRow icon="logout" label="Abmelden" onClick={() => void logout()} />
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -411,7 +424,8 @@ export function MobileWorkbench() {
   const [order, setOrder] = useState<Order>('params')
 
   const isApi = activeId === 'api'
-  const title = isApi ? 'API' : module.title
+  const isAdmin = activeId === 'admin'
+  const title = isApi ? 'API' : isAdmin ? 'Admin-Bereich' : module.title
   const files = result ? String(result.files_checked) : fileCount != null ? String(fileCount) : '–'
 
   const panes = order === 'params'
@@ -442,7 +456,7 @@ export function MobileWorkbench() {
             fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{title}</span>
         </div>
-        {!isApi && (
+        {!isApi && !isAdmin && (
           <button onClick={run} disabled={running} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 14px',
             marginRight: 4, background: 'var(--lt-primary)', color: 'var(--lt-on-primary)',
@@ -461,6 +475,13 @@ export function MobileWorkbench() {
               <ApiInfoConfig />
             </div>
             <ApiInfoMain />
+          </>
+        ) : isAdmin ? (
+          <>
+            <div style={{ background: 'var(--lt-bg-2)', borderBottom: '1px solid var(--lt-line-1)' }}>
+              <AdminConfig />
+            </div>
+            <AdminMain />
           </>
         ) : panes}
       </div>

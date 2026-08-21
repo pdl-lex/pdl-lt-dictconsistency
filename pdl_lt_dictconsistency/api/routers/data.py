@@ -1,17 +1,29 @@
 """API-Endpunkte für Daten-Ingest: Upload, Verzeichnis-Scan, Datenquellen."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from ...auth.deps import get_current_user
 from ...core import data
+from ...wbdb.connection import verbindung
+from ...wbdb.resources import list_resources
 from .._helpers import resolve_directory
 
-router = APIRouter(prefix="/data", tags=["data"])
+router = APIRouter(prefix="/data", tags=["data"], dependencies=[Depends(get_current_user)])
 
 
 class ScanRequest(BaseModel):
     directory: str
+
+
+class DbResourceRequest(BaseModel):
+    resource_ids: list[str]
+
+
+class WbdbResource(BaseModel):
+    resource_id: str
+    article_count: int
 
 
 class DatasetResponse(BaseModel):
@@ -72,6 +84,35 @@ async def upload(files: list[UploadFile], session_id: str | None = None) -> Data
         directory=str(dest), file_count=len(scanned), files=scanned,
         session_id=session_id, errors=errors,
     )
+
+
+def _require_principal(user: dict) -> str:
+    """Principal des angemeldeten Nutzers, ohne stillen Fallback.
+
+    Ein Nutzer ohne wbdb_principal_id-Zuordnung bekommt keinen DB-Zugriff —
+    kein impliziter Rückgriff auf WBDB_PRINCIPAL/anon (siehe Plan Phase 3)."""
+    principal = user["wbdb_principal_id"]
+    if not principal:
+        raise HTTPException(403, "Kein Datenbank-Zugriff: Ihrem Konto ist kein wbdb-Principal zugeordnet.")
+    return principal
+
+
+@router.get("/db-resources", response_model=list[WbdbResource])
+def db_resources(user: dict = Depends(get_current_user)) -> list[WbdbResource]:
+    """Wörterbücher aus wbdb, die der Principal des angemeldeten Nutzers sehen darf."""
+    principal = _require_principal(user)
+    with verbindung() as conn:
+        return [WbdbResource(**r) for r in list_resources(conn, principal)]
+
+
+@router.post("/db-resource", response_model=DatasetResponse)
+def db_resource(req: DbResourceRequest, user: dict = Depends(get_current_user)) -> DatasetResponse:
+    """Ausgewählte wbdb-Wörterbücher in eine neue Upload-Session materialisieren."""
+    if not req.resource_ids:
+        raise HTTPException(422, "Keine Wörterbücher ausgewählt.")
+    principal = _require_principal(user)
+    result = data.materialize_db_resource(req.resource_ids, principal=principal)
+    return DatasetResponse(**result)
 
 
 @router.delete("/upload/{session_id}")

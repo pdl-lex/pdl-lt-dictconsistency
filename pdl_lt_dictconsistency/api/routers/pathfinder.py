@@ -1,15 +1,16 @@
 """API-Endpunkt für die Tag-/Pfadsuche."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import Field
 
+from ...auth.deps import get_current_user
 from ...core.common import InvalidExpressionError
 from ...core.pathfinder import run_pathfinder
 from .._helpers import resolve_files, timed_response
 from ..schemas import FileSelection, GenericCheckResponse
 
-router = APIRouter(prefix="/checks", tags=["checks"])
+router = APIRouter(prefix="/checks", tags=["checks"], dependencies=[Depends(get_current_user)])
 
 
 class PathfinderRequest(FileSelection):

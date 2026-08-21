@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react'
 import { Icon, Logo } from '../design/icons'
 import { Kbd, kc } from '../design/widgets'
+import { useAuth } from '../state/auth'
 import { useWorkbench } from '../state/workbench'
 
 const iconBtnSquare: CSSProperties = {
@@ -20,6 +21,7 @@ function iconChip(active: boolean): CSSProperties {
 
 export function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
   const { theme, toggleTheme, layout, setLayout, module, activeId } = useWorkbench()
+  const { user, logout } = useAuth()
   const dark = theme === 'dark'
   const title = activeId === 'api' ? 'API' : module.title
   return (
@@ -59,6 +61,22 @@ export function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
       <button onClick={toggleTheme} style={iconBtnSquare} title={dark ? 'Heller Modus' : 'Dunkler Modus'}>
         <Icon name={dark ? 'moon' : 'sun'} size={13} />
       </button>
+
+      {user && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+            background: 'var(--lt-bg-1)', border: '1px solid var(--lt-line-1)',
+            borderRadius: 'var(--lt-r-md)', fontSize: 12, color: 'var(--lt-fg-2)',
+          }}>
+            <Icon name="user" size={12} style={{ color: 'var(--lt-fg-3)' }} />
+            {user.username}
+          </span>
+          <button onClick={() => void logout()} style={iconBtnSquare} title="Abmelden">
+            <Icon name="logout" size={13} />
+          </button>
+        </div>
+      )}
     </header>
   )
 }

@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon, type IconName } from '../design/icons'
 import { Kbd } from '../design/widgets'
 import { MODULES } from '../modules/registry'
+import { useAuth } from '../state/auth'
 import { useWorkbench } from '../state/workbench'
 
 interface Action { group: string; icon: IconName; label: string; hint?: string; run: () => void }
 
 export function CommandPalette({ onClose }: { onClose: () => void }) {
   const wb = useWorkbench()
+  const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -17,13 +19,14 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   const actions = useMemo<Action[]>(() => [
     ...MODULES.map((m): Action => ({ group: 'Module', icon: 'layers', label: `${m.label} öffnen`, run: () => wb.setActiveId(m.id) })),
     { group: 'Module', icon: 'bolt', label: 'API-Referenz öffnen', run: () => wb.setActiveId('api') },
+    ...(user?.is_admin ? [{ group: 'Module', icon: 'shield', label: 'Admin-Bereich öffnen', run: () => wb.setActiveId('admin') } as Action] : []),
     { group: 'Aktionen', icon: 'folder', label: 'Daten wählen…', run: () => wb.setDataDialogOpen(true) },
     { group: 'Aktionen', icon: 'play', label: 'Prüfung starten', run: () => wb.run() },
     { group: 'Aktionen', icon: wb.theme === 'dark' ? 'sun' : 'moon', label: wb.theme === 'dark' ? 'Heller Modus' : 'Dunkler Modus', run: () => wb.toggleTheme() },
     { group: 'Aktionen', icon: 'panelL', label: 'Layout · Konfiguration links', run: () => wb.setLayout('left') },
     { group: 'Aktionen', icon: 'panelR', label: 'Layout · Konfiguration rechts', run: () => wb.setLayout('right') },
     { group: 'Aktionen', icon: 'panelT', label: 'Layout · Konfiguration oben', run: () => wb.setLayout('bottom') },
-  ], [wb])
+  ], [wb, user])
 
   const q = query.trim().toLowerCase()
   const filtered = q ? actions.filter((a) => (a.label + ' ' + a.group).toLowerCase().includes(q)) : actions
