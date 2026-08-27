@@ -116,11 +116,31 @@ def test_datasources_endpoint_reports_existing_and_missing(logged_in_client, sam
     assert body["Fehlt"]["exists"] is False
 
 
-def test_db_resources_requires_principal_without_touching_wbdb(logged_in_client):
+def test_db_index_tree_requires_principal_without_touching_wbdb(logged_in_client):
     """Nutzer ohne wbdb_principal_id bekommt 403, kein Verbindungsaufbau zu wbdb
     (siehe Plan Phase 3 — kein stiller Fallback auf 'anon')."""
-    resp = logged_in_client.get("/api/data/db-resources")
+    resp = logged_in_client.get("/api/data/db-index/tree")
     assert resp.status_code == 403
+
+
+def test_db_index_routes_require_login(client):
+    assert client.get("/api/data/db-index/tree").status_code == 401
+    assert client.get("/api/data/db-index/letter", params={"resource_id": "wbf", "letter": "A"}).status_code == 401
+    assert client.get("/api/data/db-index/search", params={"q": "abc"}).status_code == 401
+    assert client.post("/api/data/db-load", json={"resource_ids": ["wbf"]}).status_code == 401
+
+
+def test_wbdb_index_rebuild_requires_admin(logged_in_client):
+    resp = logged_in_client.post("/api/admin/wbdb-index/rebuild")
+    assert resp.status_code == 403
+
+
+def test_wbdb_index_status_before_any_build(admin_client):
+    resp = admin_client.get("/api/admin/wbdb-index/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["build_id"] is None
+    assert body["status"] is None
 
 
 def test_validator_check_end_to_end(logged_in_client, sample_xml_dir):

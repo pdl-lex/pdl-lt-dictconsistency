@@ -17,7 +17,9 @@ export function CommandPalette({ onClose }: { onClose: () => void }) {
   useEffect(() => { inputRef.current?.focus() }, [])
 
   const actions = useMemo<Action[]>(() => [
+    { group: 'Module', icon: 'folder', label: 'Einführung öffnen', run: () => wb.setActiveId('intro') },
     ...MODULES.map((m): Action => ({ group: 'Module', icon: 'layers', label: `${m.label} öffnen`, run: () => wb.setActiveId(m.id) })),
+    { group: 'Module', icon: 'layers', label: 'Strukturanalyse öffnen', run: () => wb.setActiveId('structure') },
     { group: 'Module', icon: 'bolt', label: 'API-Referenz öffnen', run: () => wb.setActiveId('api') },
     ...(user?.is_admin ? [{ group: 'Module', icon: 'shield', label: 'Admin-Bereich öffnen', run: () => wb.setActiveId('admin') } as Action] : []),
     { group: 'Aktionen', icon: 'folder', label: 'Daten wählen…', run: () => wb.setDataDialogOpen(true) },

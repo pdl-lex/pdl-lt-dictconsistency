@@ -14,6 +14,7 @@ import shutil
 import tempfile
 import uuid
 import zipfile
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 MAX_ZIP_EXTRACT_SIZE = 100 * 1024 * 1024  # 100 MB
@@ -204,17 +205,37 @@ def clear_session(session_id: str) -> None:
     shutil.rmtree(path, ignore_errors=True)
 
 
-# ── wbdb-Ressourcen ─────────────────────────────────────────────────────────
+# ── wbdb-Artikel ────────────────────────────────────────────────────────────
 
-_MATERIALIZE_QUERY = """
+# \x01: ein Steuerzeichen, das in resource_id/source_path nicht vorkommen kann
+# — macht "resource_id || \x01 || source_path" zu einer eindeutigen Kodierung
+# des Paars (kein Cross-Match zwischen z. B. resource_id="ab"+source_path="c"
+# und resource_id="a"+source_path="bc" möglich). Muss mit dem `chr(1)` in der
+# Query unten übereinstimmen.
+_PAIR_SEP = "\x01"
+
+# Bewusst EIN Array aus vorkombinierten Schlüsseln statt eines Joins über zwei
+# parallele unnest()-Arrays (`= ANY` auf zwei Spalten). Gemessen an echten
+# Daten (5000 Artikel, eine Ressource): der Zwei-Spalten-Join wählte einen
+# Merge-Join über die (fast konstante, also kaum selektive) resource_id als
+# Merge-Key und filterte source_path erst danach — das entartet bei geringer
+# Kardinalität zu einem Cross-Product (172 Mio. Zeilenvergleiche, >2 Minuten).
+# Der kombinierte Schlüssel macht daraus einen einzelnen Scan mit `= ANY(...)`
+# auf einem Array (Postgres nutzt dafür einen Hash/Binärsuche-Check pro Zeile,
+# keinen Join) — dieselben 5000 Artikel in ~2s statt >120s.
+_MATERIALIZE_BY_PATH_QUERY = """
     SELECT a.article_id, a.resource_id, a.source_path, o.content
     FROM source.article a
     JOIN source.document o USING (content_sha256)
-    WHERE a.resource_id = ANY(%s)
+    WHERE (a.resource_id || chr(1) || a.source_path) = ANY(%(keys)s::text[])
 """
 
 
-def materialize_db_resource(resource_ids: list[str], *, principal: str) -> dict:
+def _stream_articles_to_session(
+    query: str, params: dict | tuple, *, principal: str, empty_error: str,
+    source_paths: Iterable[str] = (),
+    on_progress: Callable[[int], None] | None = None,
+) -> dict:
     """Artikel aus wbdb (source.document, BDO-XML) in eine neue Upload-Session
     schreiben — danach ist es aus Sicht der Prüfungen ein ganz normales
     `directory`, wie ein Server-Pfad oder Upload.
@@ -224,25 +245,47 @@ def materialize_db_resource(resource_ids: list[str], *, principal: str) -> dict:
     vertrauenswürdig — anders als bei Uploads gelten hier keine
     Größenlimits/Magic-Byte-Prüfung, wohl aber dieselbe
     Pfad-Escape-Absicherung wie bei `extract_zip`.
+
+    `source_paths`: alle erwarteten Zielpfade, vorab bekannt (aus der Auswahl,
+    nicht erst aus der Query-Antwort) — legt die Zielverzeichnisse einmalig an,
+    statt bei jeder Datei erneut `mkdir(exist_ok=True)` aufzurufen. Gemessen an
+    bwb (34.496 Artikel, 29 Buchstaben-Unterordner): die ~34.470 überflüssigen
+    mkdir-Aufrufe kosteten allein mehr Zeit als die komplette Datenbankabfrage
+    (165s von 178s Gesamtzeit) — mit Vorab-Anlage sinkt die Gesamtzeit auf ~70s.
+
+    `on_progress(file_count)` wird nach jeder geschriebenen Datei aufgerufen,
+    falls gesetzt — Grundlage für die Fortschrittsanzeige in
+    `wbdb/load_jobs.py` bei größeren Auswahlen (mehrere zehn Sekunden).
     """
     from ..wbdb.connection import als, verbindung  # lazy: core bleibt ohne wbdb nutzbar
 
     session_id, dest = new_session()
     dest_resolved = dest.resolve()
-    file_count = 0
 
+    distinct_dirs = {(dest / sp).resolve().parent for sp in source_paths}
+    for target_dir in distinct_dirs:
+        if target_dir.is_relative_to(dest_resolved):
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+    file_count = 0
     with verbindung() as conn, als(conn, principal):
         with conn.cursor(name=f"materialize_{session_id}") as cur:
             cur.itersize = 200
-            cur.execute(_MATERIALIZE_QUERY, (resource_ids,))
+            cur.execute(query, params)
             for article_id, resource_id, source_path, content in cur:
                 target = (dest / source_path).resolve()
                 if not target.is_relative_to(dest_resolved):
                     print(f"SECURITY: source_path escape attempt: {source_path!r} ({article_id})")
                     continue
-                target.parent.mkdir(parents=True, exist_ok=True)
+                if target.parent not in distinct_dirs:
+                    # source_path aus der DB-Antwort weicht von der vorab
+                    # bekannten Auswahl ab (sollte nicht vorkommen) — Fallback
+                    # statt eines FileNotFoundError beim Schreiben.
+                    target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(bytes(content))
                 file_count += 1
+                if on_progress:
+                    on_progress(file_count)
 
     scanned = scan(dest)
     return {
@@ -250,8 +293,37 @@ def materialize_db_resource(resource_ids: list[str], *, principal: str) -> dict:
         "file_count": len(scanned),
         "files": scanned,
         "session_id": session_id,
-        "errors": [] if file_count else ["Keine Artikel für die gewählten Wörterbücher gefunden."],
+        "errors": [] if file_count else [empty_error],
     }
+
+
+def materialize_db_selection(
+    pairs: set[tuple[str, str]], *, principal: str, on_progress: Callable[[int], None] | None = None,
+) -> dict:
+    """Eine `(resource_id, source_path)`-Auswahl aus wbdb materialisieren.
+
+    Die Auswahl kommt aus `wbdb/index_store.py::resolve_selection()` (ganze
+    Ressourcen, einzelne Buchstaben oder Artikel, gegen den lokalen
+    Index-Cache aufgelöst) — das Lesen selbst bleibt hier live und
+    RLS-geprüft: der Cache entscheidet nur, was im Baum *angeboten* wird, nie,
+    was tatsächlich lesbar ist. `pairs` wird als nicht-leer vorausgesetzt; der
+    Router prüft das vorher (422 bei leerer Auswahl).
+
+    Kombinierter Schlüssel (`_PAIR_SEP`) statt eines Joins über resource_id und
+    source_path getrennt, siehe Kommentar bei `_MATERIALIZE_BY_PATH_QUERY` —
+    `source_path` ist nur innerhalb eines Imports eindeutig (pdl-lt-wbdb
+    sql/schema.sql), ein einfacher `resource_id = ANY(...) AND source_path =
+    ANY(...)`-Filter könnte sonst über Kreuz falsch matchen.
+    """
+    keys = [f"{resource_id}{_PAIR_SEP}{source_path}" for resource_id, source_path in sorted(pairs)]
+    return _stream_articles_to_session(
+        _MATERIALIZE_BY_PATH_QUERY,
+        {"keys": keys},
+        principal=principal,
+        empty_error="Keine Artikel für die gewählte Auswahl gefunden.",
+        source_paths=[source_path for _, source_path in pairs],
+        on_progress=on_progress,
+    )
 
 
 # ── Datenquellen (datasources.json) ─────────────────────────────────────────

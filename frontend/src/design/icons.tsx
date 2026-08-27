@@ -69,15 +69,16 @@ export function Icon({
 
 export function Logo({ size = 18, style }: { size?: number; style?: CSSProperties }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: 'inline-block', ...style }}>
+    <svg width={size} height={size} viewBox="0 0 46 46" fill="none" style={{ display: 'inline-block', ...style }}>
+      <rect x="22.6274" width="32" height="32" rx="5" transform="rotate(45 22.6274 0)" fill="url(#lt-logo-g)" />
+      <path d="M14.1173 21.2144C13.3364 21.9954 13.3363 23.2618 14.1173 24.0428L21.0392 30.9647L18.8806 33.1233C18.0995 33.9042 16.8331 33.9043 16.0522 33.1233L6.97163 24.0428C6.19064 23.2618 6.19077 21.9954 6.97163 21.2144L21.2132 6.97281C21.9943 6.19176 23.2606 6.19176 24.0416 6.97281L26.2002 9.13142L14.1173 21.2144Z" fill="#003835" />
+      <path d="M31.1376 24.0422C31.9185 23.2612 31.9186 21.9948 31.1376 21.2138L24.2156 14.2919L26.3743 12.1333C27.1553 11.3524 28.4217 11.3523 29.2027 12.1333L38.2832 21.2138C39.0642 21.9948 39.0641 23.2611 38.2832 24.0422L24.0416 38.2838C23.2606 39.0648 21.9943 39.0648 21.2132 38.2838L19.0546 36.1252L31.1376 24.0422Z" fill="#003835" />
       <defs>
-        <linearGradient id="lt-g" x1="0" x2="1" y1="0" y2="1">
-          <stop offset="0" stopColor="var(--lt-g-400)" />
+        <linearGradient id="lt-logo-g" x1="29.1878" y1="32" x2="49.6425" y2="1.04094" gradientUnits="userSpaceOnUse">
+          <stop stopColor="var(--lt-g-400)" />
           <stop offset="1" stopColor="var(--lt-g-700)" />
         </linearGradient>
       </defs>
-      <path d="M12 1.5 22.5 12 12 22.5 1.5 12z" fill="url(#lt-g)" />
-      <path d="M12 6.5 17.5 12 12 17.5 6.5 12z" fill="var(--lt-bg-0)" opacity="0.18" />
     </svg>
   )
 }

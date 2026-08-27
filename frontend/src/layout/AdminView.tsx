@@ -5,7 +5,7 @@
 // setup/Readme Access WBDB.md §2, „keine zweite Rechteverwaltung").
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { Icon, type IconName } from '../design/icons'
-import { adminApi, type AdminUser, type Principal, type ScopeResult } from '../api/client'
+import { adminApi, type AdminUser, type Principal, type ScopeResult, type WbdbIndexStatus } from '../api/client'
 import { useAuth } from '../state/auth'
 import type { LayoutMode } from '../state/workbench'
 
@@ -146,6 +146,10 @@ export function AdminMain() {
   const [createBusy, setCreateBusy] = useState(false)
   const [createError, setCreateError] = useState('')
 
+  const [indexStatus, setIndexStatus] = useState<WbdbIndexStatus | null>(null)
+  const [indexBusy, setIndexBusy] = useState(false)
+  const [indexError, setIndexError] = useState('')
+
   const refresh = async () => {
     try {
       const list = await adminApi.listUsers()
@@ -157,7 +161,16 @@ export function AdminMain() {
     try { setPrincipals(await adminApi.listPrincipals()); setPrincipalsAvailable(true) }
     catch { setPrincipals([]); setPrincipalsAvailable(false) }
   }
-  useEffect(() => { void refresh(); void refreshPrincipals() }, [])
+  const refreshIndexStatus = async () => {
+    try { setIndexStatus(await adminApi.wbdbIndexStatus()) } catch (e) { setIndexError(String(e)) }
+  }
+  useEffect(() => { void refresh(); void refreshPrincipals(); void refreshIndexStatus() }, [])
+
+  const rebuildIndex = async () => {
+    setIndexBusy(true); setIndexError('')
+    try { setIndexStatus(await adminApi.rebuildWbdbIndex()) }
+    catch (e) { setIndexError(String(e)) } finally { setIndexBusy(false) }
+  }
 
   const savePrincipal = async (id: number) => {
     setBusyId(id); setError('')
@@ -263,6 +276,24 @@ export function AdminMain() {
             wbdb nicht erreichbar — Principal wird als Freitext eingegeben, ohne Abgleich mit der vorhandenen Liste.
           </div>
         )}
+
+        <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <Icon name="layers" size={14} style={{ color: 'var(--lt-primary)', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 200, fontSize: 12.5 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>Artikelindex (Baum-Browser „Datenbank")</div>
+            <div style={{ color: 'var(--lt-fg-3)' }}>
+              {indexStatus === null ? 'Lädt…'
+                : indexStatus.status === null ? 'Noch nie aufgebaut.'
+                : indexStatus.status === 'running' ? `Läuft seit ${indexStatus.started_at}…`
+                : indexStatus.status === 'error' ? <span style={{ color: 'var(--lt-err)' }}>Fehlgeschlagen: {indexStatus.error}</span>
+                : `Index vom ${indexStatus.finished_at} — ${indexStatus.row_count} Artikel (von ${indexStatus.triggered_by}).`}
+            </div>
+          </div>
+          <button onClick={() => void rebuildIndex()} disabled={indexBusy || indexStatus?.status === 'running'} style={btnGhost}>
+            <Icon name="refresh" size={12} /> {indexBusy ? 'Baut auf…' : 'Jetzt neu aufbauen'}
+          </button>
+          {indexError && <span style={{ fontSize: 11.5, color: 'var(--lt-err)', width: '100%' }}>{indexError}</span>}
+        </div>
 
         <div style={{ ...card, padding: 0 }}>
           {users === null ? (

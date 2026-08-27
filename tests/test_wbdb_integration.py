@@ -1,5 +1,6 @@
 """Automatisierte Variante des Phase-0-Spikes: echte wbdb-Verbindung, echter
-Principal-Scope, echte Materialisierung von source.document nach XML-Dateien.
+Principal-Scope, echte Materialisierung von source.document nach XML-Dateien,
+sowie (wo WBDB_INDEX_PRINCIPAL gesetzt ist) der Artikelindex-Reindex.
 
 Wird übersprungen, wenn keine wbdb erreichbar ist (z. B. der lokale
 Docker-Container 'wbdb' läuft nicht) oder die Reader-Zugangsdaten fehlen —
@@ -14,8 +15,8 @@ import pytest
 from lxml import etree
 
 from pdl_lt_dictconsistency.core import data as core_data
-from pdl_lt_dictconsistency.wbdb.connection import als, verbindung
-from pdl_lt_dictconsistency.wbdb.resources import list_resources
+from pdl_lt_dictconsistency.wbdb import index_store
+from pdl_lt_dictconsistency.wbdb.connection import als, current_scope, verbindung
 
 
 def _wbdb_reachable() -> bool:
@@ -43,46 +44,87 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_current_scope_readable_for_anon():
-    """auth.current_scope ist die Grundlage von admin.py's Testen-Knopf — muss
-    für die Leserolle wbdb_dictconsistency ohne Fehler abfragbar sein."""
-    with verbindung() as conn, als(conn, "anon") as c:
-        cur = c.execute("SELECT * FROM auth.current_scope")
-        columns = [col.name for col in cur.description]
-        rows = cur.fetchall()
-    assert columns
-    assert isinstance(rows, list)
-
-
-def test_list_resources_returns_structured_counts():
+    """auth.current_scope ist die Grundlage von admin.py's Testen-Knopf und von
+    jedem Baum-Browse-Endpunkt (routers/db_index.py) — muss für die Leserolle
+    wbdb_dictconsistency ohne Fehler abfragbar sein."""
     with verbindung() as conn:
-        resources = list_resources(conn, "anon")
-    assert isinstance(resources, list)
-    for entry in resources:
-        assert entry.keys() == {"resource_id", "article_count"}
-        assert entry["article_count"] >= 0
+        scope = current_scope(conn, "anon")
+    assert isinstance(scope, list)
+    for resource_id, collection_id in scope:
+        assert resource_id and collection_id
 
 
-def test_materialize_db_resource_writes_wellformed_xml(tmp_path, monkeypatch):
+def test_materialize_db_selection_writes_wellformed_xml(tmp_path, monkeypatch):
     """Automatisierte Variante des Phase-0-Bytevergleichs: die aus
     source.document geschriebenen Dateien müssen wohlgeformtes XML sein und
-    dürfen den Session-Ordner nicht verlassen (source_path-Escape-Schutz)."""
+    dürfen den Session-Ordner nicht verlassen (source_path-Escape-Schutz).
+    Fragt die zu materialisierenden Pfade direkt aus wbdb ab, unabhängig vom
+    lokalen Index-Cache (der hat seinen eigenen Test unten)."""
     monkeypatch.setattr(core_data, "UPLOADS_ROOT", tmp_path / "lt_uploads")
 
-    with verbindung() as conn:
-        resources = list_resources(conn, "anon")
-    if not resources:
+    with verbindung() as conn, als(conn, "anon") as c:
+        counts = c.execute("SELECT resource_id, count(*) FROM source.article GROUP BY resource_id").fetchall()
+    if not counts:
         pytest.skip("Principal 'anon' hat aktuell keine Freigaben in wbdb.")
+    smallest_resource, expected_count = min(counts, key=lambda r: r[1])
 
-    smallest = min(resources, key=lambda r: r["article_count"])
-    result = core_data.materialize_db_resource([smallest["resource_id"]], principal="anon")
+    with verbindung() as conn, als(conn, "anon") as c:
+        paths = c.execute(
+            "SELECT source_path FROM source.article WHERE resource_id = %s", (smallest_resource,)
+        ).fetchall()
+    pairs = {(smallest_resource, p[0]) for p in paths}
+
+    result = core_data.materialize_db_selection(pairs, principal="anon")
 
     try:
-        assert result["file_count"] == smallest["article_count"]
+        assert result["file_count"] == expected_count
         dest = core_data.UPLOADS_ROOT / result["session_id"]
         written = list(dest.rglob("*.xml"))
         assert len(written) == result["file_count"]
         for path in written:
             assert path.resolve().is_relative_to(dest.resolve())
             etree.parse(str(path))  # wirft XMLSyntaxError, wenn nicht wohlgeformt
+    finally:
+        core_data.clear_session(result["session_id"])
+
+
+def _index_principal_configured() -> bool:
+    return bool(os.environ.get("WBDB_INDEX_PRINCIPAL", "").strip())
+
+
+@pytest.mark.skipif(not _index_principal_configured(), reason="WBDB_INDEX_PRINCIPAL nicht gesetzt")
+def test_rebuild_index_matches_live_count(isolated_env):
+    """Reindex-Zeilenzahl muss mit einer direkten, live abgefragten Zählung
+    unter demselben Principal übereinstimmen — Regressionsanker gegen die
+    frühere list_resources()-Logik."""
+    index_store.init_db()
+    status = index_store.rebuild_index(triggered_by="test")
+    assert status["status"] == "ok"
+
+    with verbindung() as conn, als(conn, os.environ["WBDB_INDEX_PRINCIPAL"]) as c:
+        (live_count,) = c.execute("SELECT count(*) FROM source.article").fetchone()
+    assert status["row_count"] == live_count
+
+
+@pytest.mark.skipif(not _index_principal_configured(), reason="WBDB_INDEX_PRINCIPAL nicht gesetzt")
+def test_rebuild_then_resolve_and_materialize_whole_resource(isolated_env, tmp_path, monkeypatch):
+    """Ende-zu-Ende: Reindex -> Baum lesen -> Ressourcen-Auswahl auflösen ->
+    laden, gegen den Principal 'anon' (dessen Scope typischerweise eine echte
+    Teilmenge des Index-Principals ist)."""
+    monkeypatch.setattr(core_data, "UPLOADS_ROOT", tmp_path / "lt_uploads")
+    index_store.init_db()
+    index_store.rebuild_index(triggered_by="test")
+
+    tree = index_store.get_tree("anon")
+    if not tree:
+        pytest.skip("Principal 'anon' hat aktuell keine Freigaben in wbdb.")
+    resource_id = min(tree, key=lambda r: r["article_count"])["resource_id"]
+
+    pairs = index_store.resolve_selection("anon", [resource_id], [], [])
+    assert pairs
+
+    result = core_data.materialize_db_selection(pairs, principal="anon")
+    try:
+        assert result["file_count"] == len(pairs)
     finally:
         core_data.clear_session(result["session_id"])

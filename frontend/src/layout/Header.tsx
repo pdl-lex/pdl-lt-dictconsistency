@@ -20,10 +20,10 @@ function iconChip(active: boolean): CSSProperties {
 }
 
 export function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
-  const { theme, toggleTheme, layout, setLayout, module, activeId } = useWorkbench()
+  const { theme, toggleTheme, layout, setLayout, module, activeId, setLoginDialogOpen } = useWorkbench()
   const { user, logout } = useAuth()
   const dark = theme === 'dark'
-  const title = activeId === 'api' ? 'API' : module.title
+  const title = activeId === 'api' ? 'API' : activeId === 'structure' ? 'Strukturanalyse' : activeId === 'intro' ? 'Einführung' : module.title
   return (
     <header style={{
       gridArea: 'head', display: 'flex', alignItems: 'center', background: 'var(--lt-bg-0)',
@@ -62,7 +62,7 @@ export function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
         <Icon name={dark ? 'moon' : 'sun'} size={13} />
       </button>
 
-      {user && (
+      {user ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
@@ -76,6 +76,15 @@ export function Header({ onOpenPalette }: { onOpenPalette: () => void }) {
             <Icon name="logout" size={13} />
           </button>
         </div>
+      ) : (
+        <button onClick={() => setLoginDialogOpen(true)} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+          background: 'var(--lt-bg-1)', border: '1px solid var(--lt-line-1)',
+          borderRadius: 'var(--lt-r-md)', fontSize: 12, color: 'var(--lt-fg-2)', cursor: 'pointer',
+        }} title="Anmelden">
+          <Icon name="user" size={12} style={{ color: 'var(--lt-fg-3)' }} />
+          Login
+        </button>
       )}
     </header>
   )

@@ -7,6 +7,8 @@ import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Icon, Logo, type IconName } from '../design/icons'
 import { Diff, Sparkbars, type SparkDatum } from '../design/widgets'
 import { ApiInfoConfig, ApiInfoMain } from '../modules/apiInfo'
+import { IntroConfig, IntroMain } from '../modules/intro'
+import { StructureConfig, StructureMain, useStructure } from '../modules/structure'
 import { AdminConfig, AdminMain } from './AdminView'
 import type { Column } from '../modules/registry'
 import { useAuth } from '../state/auth'
@@ -96,7 +98,7 @@ type Order = 'params' | 'results'
 function MobileMenu({ open, onClose, order, setOrder }: {
   open: boolean; onClose: () => void; order: Order; setOrder: (o: Order) => void
 }) {
-  const { activeId, setActiveId, setDataDialogOpen, theme, toggleTheme } = useWorkbench()
+  const { activeId, setActiveId, setDataDialogOpen, setLoginDialogOpen, theme, toggleTheme } = useWorkbench()
   const { user, logout } = useAuth()
   const menu = useMemo(() => buildMenu(!!user?.is_admin), [user])
   const activeGroup = menu.find((g) => g.items.some((it) => it.id === activeId))?.group ?? null
@@ -165,13 +167,15 @@ function MobileMenu({ open, onClose, order, setOrder }: {
           <MenuToggle icon={theme === 'dark' ? 'moon' : 'sun'} label="Dunkler Modus"
             on={theme === 'dark'} onChange={() => toggleTheme()} />
 
-          {user && (
+          <div style={{ height: 1, background: 'var(--lt-line-1)', margin: '10px 0' }} />
+          <MenuLabel>Konto</MenuLabel>
+          {user ? (
             <>
-              <div style={{ height: 1, background: 'var(--lt-line-1)', margin: '10px 0' }} />
-              <MenuLabel>Konto</MenuLabel>
               <MenuRow icon="user" label={user.username} />
               <MenuRow icon="logout" label="Abmelden" onClick={() => void logout()} />
             </>
+          ) : (
+            <MenuRow icon="user" label="Login" onClick={() => { onClose(); setLoginDialogOpen(true) }} />
           )}
         </div>
       </div>
@@ -420,12 +424,15 @@ function MobileResults() {
 
 export function MobileWorkbench() {
   const { module, activeId, run, running, directory, fileCount, result } = useWorkbench()
+  const structure = useStructure()
   const [menuOpen, setMenuOpen] = useState(false)
   const [order, setOrder] = useState<Order>('params')
 
   const isApi = activeId === 'api'
   const isAdmin = activeId === 'admin'
-  const title = isApi ? 'API' : isAdmin ? 'Admin-Bereich' : module.title
+  const isStructure = activeId === 'structure'
+  const isIntro = activeId === 'intro'
+  const title = isApi ? 'API' : isAdmin ? 'Admin-Bereich' : isStructure ? 'Strukturanalyse' : isIntro ? 'Einführung' : module.title
   const files = result ? String(result.files_checked) : fileCount != null ? String(fileCount) : '–'
 
   const panes = order === 'params'
@@ -456,7 +463,16 @@ export function MobileWorkbench() {
             fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{title}</span>
         </div>
-        {!isApi && !isAdmin && (
+        {isStructure ? (
+          <button onClick={() => void structure.analyze()} disabled={structure.loading} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 14px',
+            marginRight: 4, background: 'var(--lt-primary)', color: 'var(--lt-on-primary)',
+            border: 'none', borderRadius: 'var(--lt-r-md)', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', opacity: structure.loading ? 0.7 : 1, flexShrink: 0,
+          }}>
+            <Icon name="play" size={12} /> {structure.loading ? 'Analysiert…' : 'Analysieren'}
+          </button>
+        ) : !isApi && !isAdmin && !isIntro && (
           <button onClick={run} disabled={running} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 14px',
             marginRight: 4, background: 'var(--lt-primary)', color: 'var(--lt-on-primary)',
@@ -482,6 +498,20 @@ export function MobileWorkbench() {
               <AdminConfig />
             </div>
             <AdminMain />
+          </>
+        ) : isStructure ? (
+          <>
+            <div style={{ background: 'var(--lt-bg-2)', borderBottom: '1px solid var(--lt-line-1)' }}>
+              <StructureConfig />
+            </div>
+            <StructureMain />
+          </>
+        ) : isIntro ? (
+          <>
+            <div style={{ background: 'var(--lt-bg-2)', borderBottom: '1px solid var(--lt-line-1)' }}>
+              <IntroConfig />
+            </div>
+            <IntroMain />
           </>
         ) : panes}
       </div>

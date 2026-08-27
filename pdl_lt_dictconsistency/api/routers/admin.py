@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from ...auth import db as auth_db
 from ...auth.deps import require_admin
 from ...auth.passwords import hash_password
+from ...wbdb import index_store
 from ...wbdb.connection import als, verbindung
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -167,3 +168,42 @@ def test_principal(req: TestPrincipalRequest) -> dict:
         columns = [col.name for col in cur.description]
         rows = [dict(zip(columns, row, strict=True)) for row in cur.fetchall()]
     return {"principal_id": principal, "scope": rows}
+
+
+class WbdbIndexStatus(BaseModel):
+    build_id: int | None
+    started_at: str | None
+    finished_at: str | None
+    status: str | None
+    row_count: int | None
+    error: str | None
+    triggered_by: str | None
+
+
+@router.get("/wbdb-index/status", response_model=WbdbIndexStatus)
+def wbdb_index_status() -> WbdbIndexStatus:
+    """Letzter Reindex-Lauf des Artikel-Index-Caches (Baum-Browser, siehe
+    routers/db_index.py) — Zeitstempel, Zeilenzahl, Status/Fehler."""
+    status = index_store.get_status()
+    if status is None:
+        return WbdbIndexStatus(
+            build_id=None, started_at=None, finished_at=None,
+            status=None, row_count=None, error=None, triggered_by=None,
+        )
+    return WbdbIndexStatus(**status)
+
+
+@router.post("/wbdb-index/rebuild", response_model=WbdbIndexStatus)
+def rebuild_wbdb_index(admin: dict = Depends(require_admin)) -> WbdbIndexStatus:
+    """Artikel-Index-Cache neu aufbauen — liest source.article komplett unter
+    dem dedizierten Index-Principal (WBDB_INDEX_PRINCIPAL, siehe
+    wbdb/connection.py::index_principal()), synchron (kein Fortschritts-Polling
+    — reine Textspalten ohne XML-Bytes, deutlich leichter als
+    materialize_db_resource, das bereits synchron läuft)."""
+    try:
+        status = index_store.rebuild_index(triggered_by=admin["username"])
+    except index_store.RebuildInProgress as e:
+        raise HTTPException(409, str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(503, str(e)) from e
+    return WbdbIndexStatus(**status)

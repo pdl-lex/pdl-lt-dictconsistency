@@ -14,15 +14,21 @@ const RAIL_ICON: Record<string, IconName> = {
 export function buildMenu(isAdmin: boolean): MenuGroup[] {
   const order = ['Start', 'XML', 'Stil und Schreibung', 'LLM', ...(isAdmin ? ['Verwaltung'] : [])]
   const staticItems: Record<string, MenuItem[]> = {
-    Start: [{ id: 'intro', label: 'Einführung', disabled: true }, { id: 'data', label: 'Daten' },
+    Start: [{ id: 'intro', label: 'Einführung' }, { id: 'data', label: 'Daten' },
       { id: 'api', label: 'API' }],
     LLM: [{ id: 'chat', label: 'Chat', disabled: true }, { id: 'ocr', label: 'Texterkennung (OCR)', disabled: true },
       { id: 'settings', label: 'LLM-Einstellungen', disabled: true }],
     Verwaltung: [{ id: 'admin', label: 'Admin-Bereich' }],
   }
+  // Sonderseiten ohne Tabellen-Ergebnis (eigene Modul-Def wäre hier unpassend,
+  // siehe modules/structure.tsx) hängen sich an eine Modul-Gruppe an.
+  const extraItems: Record<string, MenuItem[]> = {
+    XML: [{ id: 'structure', label: 'Strukturanalyse' }],
+  }
   return order.map((group) => ({
     group, icon: RAIL_ICON[group],
-    items: staticItems[group] ?? MODULES.filter((m) => m.group === group).map((m) => ({ id: m.id, label: m.label })),
+    items: staticItems[group]
+      ?? [...MODULES.filter((m) => m.group === group).map((m) => ({ id: m.id, label: m.label })), ...(extraItems[group] ?? [])],
   }))
 }
 
@@ -91,7 +97,7 @@ export function Rail() {
   const menu = useMemo(() => buildMenu(!!user?.is_admin), [user])
   const [hover, setHover] = useState(false)
   const activeGroup = menu.find((g) => g.items.some((it) => it.id === activeId))?.group ?? menu[0].group
-  const [openGroup, setOpenGroup] = useState<string | null>(activeGroup)
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(menu.map((g) => g.group)))
   const expanded = railPinned || hover
 
   return (
@@ -139,8 +145,12 @@ export function Rail() {
 
         <div style={{ overflowY: 'auto', flex: 1, padding: '8px' }}>
           {menu.map((g) => (
-            <RailGroup key={g.group} g={g} open={openGroup === g.group}
-              onToggle={() => setOpenGroup(openGroup === g.group ? null : g.group)} />
+            <RailGroup key={g.group} g={g} open={openGroups.has(g.group)}
+              onToggle={() => setOpenGroups((prev) => {
+                const next = new Set(prev)
+                if (next.has(g.group)) next.delete(g.group); else next.add(g.group)
+                return next
+              })} />
           ))}
         </div>
 

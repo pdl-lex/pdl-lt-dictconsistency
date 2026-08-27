@@ -1,6 +1,7 @@
-import { useState, type CSSProperties, type FormEvent } from 'react'
+import { useEffect, useState, type CSSProperties, type FormEvent } from 'react'
 import { Icon, Logo } from '../design/icons'
 import { useAuth } from '../state/auth'
+import { useWorkbench } from '../state/workbench'
 
 const inputStyle: CSSProperties = {
   width: '100%', boxSizing: 'border-box', padding: '9px 10px', fontSize: 13,
@@ -13,11 +14,19 @@ const btnPrimary: CSSProperties = {
   height: 36, padding: '0 14px', borderRadius: 'var(--lt-r-md)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
 }
 
-export function LoginGate() {
+export function LoginDialog() {
   const { login, error } = useAuth()
+  const { setLoginDialogOpen } = useWorkbench()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const close = () => setLoginDialogOpen(false)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -25,6 +34,7 @@ export function LoginGate() {
     setBusy(true)
     try {
       await login(username.trim(), password)
+      close()
     } catch {
       /* error steht im Context */
     } finally {
@@ -33,21 +43,22 @@ export function LoginGate() {
   }
 
   return (
-    <div style={{
-      width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'var(--lt-bg-1)', color: 'var(--lt-fg-1)',
+    <div onClick={close} style={{
+      position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(8,12,10,0.42)', backdropFilter: 'blur(1.5px)',
+      display: 'flex', justifyContent: 'center', alignItems: 'flex-start', paddingTop: '8%',
     }}>
-      <form onSubmit={submit} style={{
+      <form onClick={(e) => e.stopPropagation()} onSubmit={submit} style={{
         width: 340, maxWidth: '90%', background: 'var(--lt-bg-0)', border: '1px solid var(--lt-line-2)',
         borderRadius: 'var(--lt-r-md)', boxShadow: 'var(--lt-shadow-pop)', padding: 24,
         display: 'flex', flexDirection: 'column', gap: 14,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Logo size={22} />
-          <div>
+          <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14, fontWeight: 600 }}>LexoTerm Tools</div>
-            <div style={{ fontSize: 11.5, color: 'var(--lt-fg-3)' }}>Wörterbuchkonsistenzprüfung</div>
+            <div style={{ fontSize: 11.5, color: 'var(--lt-fg-3)' }}>Anmelden</div>
           </div>
+          <Icon name="x" size={14} style={{ cursor: 'pointer', color: 'var(--lt-fg-3)' }} onClick={close} />
         </div>
 
         <label style={{ fontSize: 12, color: 'var(--lt-fg-3)', display: 'flex', flexDirection: 'column', gap: 5 }}>

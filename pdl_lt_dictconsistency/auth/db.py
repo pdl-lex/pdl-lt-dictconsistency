@@ -45,6 +45,10 @@ def connect() -> Iterator[sqlite3.Connection]:
     conn = sqlite3.connect(local_db_path())
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL statt des Rollback-Journals: der wbdb-Reindex (wbdb/index_store.py)
+    # schreibt hier jetzt auch in großen Batches, und WAL lässt Sessions/Logins
+    # währenddessen weiterlesen statt zu blockieren.
+    conn.execute("PRAGMA journal_mode = WAL")
     try:
         yield conn
         conn.commit()

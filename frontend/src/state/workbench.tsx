@@ -23,6 +23,8 @@ interface WorkbenchState {
   applyDataset: (directory: string, fileCount: number) => void
   dataDialogOpen: boolean
   setDataDialogOpen: (v: boolean) => void
+  loginDialogOpen: boolean
+  setLoginDialogOpen: (v: boolean) => void
   config: Config
   setField: (key: string, value: string | boolean | string[]) => void
   result: CheckResult | null
@@ -38,10 +40,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [layout, setLayout] = useState<LayoutMode>('left')
   const [railPinned, setRailPinned] = useState(false)
-  const [activeId, setActiveId] = useState<string>('spelling')
+  const [activeId, setActiveId] = useState<string>('intro')
   const [directory, setDirectory] = useState<string>(() => localStorage.getItem('lt.directory') ?? '')
   const [fileCount, setFileCount] = useState<number | null>(null)
   const [dataDialogOpen, setDataDialogOpen] = useState(false)
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false)
   const [configs, setConfigs] = useState<Record<string, Config>>({})
   const [result, setResult] = useState<CheckResult | null>(null)
   const [running, setRunning] = useState(false)
@@ -97,9 +100,10 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     layout, setLayout, railPinned, setRailPinned,
     activeId, setActiveId: changeModule, module,
     directory, setDirectory, fileCount, applyDataset, dataDialogOpen, setDataDialogOpen,
+    loginDialogOpen, setLoginDialogOpen,
     config, setField,
     result, running, error, lastRunMs, run,
-  }), [theme, layout, railPinned, activeId, changeModule, module, directory, fileCount, applyDataset, dataDialogOpen, config, setField, result, running, error, lastRunMs, run])
+  }), [theme, layout, railPinned, activeId, changeModule, module, directory, fileCount, applyDataset, dataDialogOpen, loginDialogOpen, config, setField, result, running, error, lastRunMs, run])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

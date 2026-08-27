@@ -51,7 +51,24 @@ export interface Dataset {
 
 export interface Datasource { name: string; path: string; key: string; exists: boolean }
 
-export interface WbdbResource { resource_id: string; article_count: number }
+export interface DbLetterSummary { letter: string; article_count: number }
+export interface DbResourceSummary { resource_id: string; article_count: number; letters: DbLetterSummary[] }
+export interface DbArticleSummary { source_path: string; article_id: string; lemma: string | null; pos: string | null }
+export interface DbSearchHit { resource_id: string; letter: string; source_path: string; article_id: string; lemma: string | null }
+export interface DbSelection {
+  resource_ids: string[]
+  resource_letters: [string, string][]
+  articles: [string, string][]
+}
+
+export interface LoadJobHandle { job_id: string; total: number }
+export interface LoadJobStatus {
+  status: 'running' | 'ok' | 'error'
+  done: number
+  total: number
+  error: string | null
+  result: Dataset | null
+}
 
 export interface User { id: number; username: string; wbdb_principal_id: string | null; is_admin: boolean }
 
@@ -82,6 +99,16 @@ export interface Principal {
   active: boolean
 }
 
+export interface WbdbIndexStatus {
+  build_id: number | null
+  started_at: string | null
+  finished_at: string | null
+  status: string | null
+  row_count: number | null
+  error: string | null
+  triggered_by: string | null
+}
+
 export const adminApi = {
   listUsers: () => api.get<AdminUser[]>('/admin/users'),
   listPrincipals: () => api.get<Principal[]>('/admin/principals'),
@@ -95,6 +122,8 @@ export const adminApi = {
     api.post<{ status: string }>(`/admin/users/${id}/password`, { password }),
   testPrincipal: (principalId: string) =>
     api.post<ScopeResult>('/admin/test-principal', { principal_id: principalId }),
+  wbdbIndexStatus: () => api.get<WbdbIndexStatus>('/admin/wbdb-index/status'),
+  rebuildWbdbIndex: () => api.post<WbdbIndexStatus>('/admin/wbdb-index/rebuild', {}),
 }
 
 export const dataApi = {
@@ -106,8 +135,14 @@ export const dataApi = {
     const q = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''
     return api.upload<Dataset>(`/data/upload${q}`, form)
   },
-  dbResources: () => api.get<WbdbResource[]>('/data/db-resources'),
-  loadDbResource: (resourceIds: string[]) => api.post<Dataset>('/data/db-resource', { resource_ids: resourceIds }),
+  dbIndexTree: () => api.get<DbResourceSummary[]>('/data/db-index/tree'),
+  dbIndexLetter: (resourceId: string, letter: string) =>
+    api.get<DbArticleSummary[]>(
+      `/data/db-index/letter?resource_id=${encodeURIComponent(resourceId)}&letter=${encodeURIComponent(letter)}`
+    ),
+  dbIndexSearch: (q: string) => api.get<DbSearchHit[]>(`/data/db-index/search?q=${encodeURIComponent(q)}`),
+  dbLoadSelection: (selection: DbSelection) => api.post<LoadJobHandle>('/data/db-load', selection),
+  dbLoadStatus: (jobId: string) => api.get<LoadJobStatus>(`/data/db-load/${jobId}`),
 }
 
 export interface ValidatorResponse {
