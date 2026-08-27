@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 
+import psycopg
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -116,6 +117,35 @@ def reset_password(user_id: int, req: PasswordResetRequest) -> dict:
         if cur.rowcount == 0:
             raise HTTPException(404, "Nutzer nicht gefunden.")
     return {"status": "ok"}
+
+
+class PrincipalOut(BaseModel):
+    principal_id: str
+    kind: str
+    label: str
+    active: bool
+
+
+@router.get("/principals", response_model=list[PrincipalOut])
+def list_principals() -> list[PrincipalOut]:
+    """Principals aus wbdb, rein lesend über die wbdb_reader-Freigabe auf
+    auth.principal (siehe pdl-lt-wbdb sql/zugriff.sql) — kein als(), das ist
+    ein Katalog-Read wie source.resource, keine principal-gefilterte Abfrage.
+    Grants bleiben unsichtbar, die liest ausschließlich wbdb_admin_ui.
+
+    Liefert 503 statt einer leeren Liste, wenn wbdb nicht konfiguriert oder
+    nicht erreichbar ist, damit das Frontend das von „wbdb hat wirklich null
+    Principals" unterscheiden und auf Freitext zurückfallen kann."""
+    try:
+        with verbindung() as conn:
+            rows = conn.execute(
+                "SELECT principal_id, kind, label, active FROM auth.principal ORDER BY label"
+            ).fetchall()
+    except (KeyError, psycopg.Error) as e:
+        raise HTTPException(503, f"wbdb nicht erreichbar: {e}") from e
+    return [
+        PrincipalOut(principal_id=r[0], kind=r[1], label=r[2], active=r[3]) for r in rows
+    ]
 
 
 class TestPrincipalRequest(BaseModel):

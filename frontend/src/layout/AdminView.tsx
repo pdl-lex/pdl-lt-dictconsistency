@@ -5,7 +5,7 @@
 // setup/Readme Access WBDB.md §2, „keine zweite Rechteverwaltung").
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from 'react'
 import { Icon, type IconName } from '../design/icons'
-import { adminApi, type AdminUser, type ScopeResult } from '../api/client'
+import { adminApi, type AdminUser, type Principal, type ScopeResult } from '../api/client'
 import { useAuth } from '../state/auth'
 import type { LayoutMode } from '../state/workbench'
 
@@ -45,6 +45,37 @@ function Callout({ icon, children }: { icon: IconName; children: ReactNode }) {
       <Icon name={icon} size={14} style={{ color: 'var(--lt-primary)', flexShrink: 0, marginTop: 2 }} />
       <div style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{children}</div>
     </div>
+  )
+}
+
+function PrincipalField({
+  value, onChange, principals, principalsAvailable, style,
+}: {
+  value: string
+  onChange: (value: string) => void
+  principals: Principal[]
+  principalsAvailable: boolean
+  style?: CSSProperties
+}) {
+  if (!principalsAvailable) {
+    return (
+      <input value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder="wbdb-Principal (leer = kein Zugriff)"
+        style={{ ...inputStyle, fontFamily: 'var(--lt-font-mono)', ...style }} />
+    )
+  }
+  const known = !value || principals.some((p) => p.principal_id === value)
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}
+      style={{ ...inputStyle, fontFamily: 'var(--lt-font-mono)', ...style }}>
+      <option value="">— kein Principal —</option>
+      {!known && <option value={value}>⚠ {value} (nicht in der aktuellen wbdb-Liste)</option>}
+      {principals.map((p) => (
+        <option key={p.principal_id} value={p.principal_id}>
+          {p.label} — {p.principal_id} ({p.kind}{!p.active ? ', inaktiv' : ''})
+        </option>
+      ))}
+    </select>
   )
 }
 
@@ -95,6 +126,8 @@ export function AdminMain() {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<AdminUser[] | null>(null)
   const [error, setError] = useState('')
+  const [principals, setPrincipals] = useState<Principal[]>([])
+  const [principalsAvailable, setPrincipalsAvailable] = useState(true)
   const [drafts, setDrafts] = useState<Record<number, string>>({})
   const [busyId, setBusyId] = useState<number | null>(null)
 
@@ -120,7 +153,11 @@ export function AdminMain() {
       setDrafts(Object.fromEntries(list.map((u) => [u.id, u.wbdb_principal_id ?? ''])))
     } catch (e) { setError(String(e)) }
   }
-  useEffect(() => { void refresh() }, [])
+  const refreshPrincipals = async () => {
+    try { setPrincipals(await adminApi.listPrincipals()); setPrincipalsAvailable(true) }
+    catch { setPrincipals([]); setPrincipalsAvailable(false) }
+  }
+  useEffect(() => { void refresh(); void refreshPrincipals() }, [])
 
   const savePrincipal = async (id: number) => {
     setBusyId(id); setError('')
@@ -202,8 +239,8 @@ export function AdminMain() {
               </label>
               <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 11.5, color: 'var(--lt-fg-3)' }}>
                 wbdb-Principal (optional)
-                <input value={form.principal} onChange={(e) => setForm({ ...form, principal: e.target.value })}
-                  placeholder="z. B. anon" style={{ ...inputStyle, width: 180, fontFamily: 'var(--lt-font-mono)' }} />
+                <PrincipalField value={form.principal} onChange={(v) => setForm({ ...form, principal: v })}
+                  principals={principals} principalsAvailable={principalsAvailable} style={{ width: 180 }} />
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--lt-fg-2)', alignSelf: 'flex-end', paddingBottom: 8 }}>
                 <input type="checkbox" checked={form.isAdmin} onChange={(e) => setForm({ ...form, isAdmin: e.target.checked })} />
@@ -221,6 +258,11 @@ export function AdminMain() {
         )}
 
         {error && <div style={{ fontSize: 12.5, color: 'var(--lt-err)' }}>{error}</div>}
+        {!principalsAvailable && (
+          <div style={{ fontSize: 12, color: 'var(--lt-fg-3)' }}>
+            wbdb nicht erreichbar — Principal wird als Freitext eingegeben, ohne Abgleich mit der vorhandenen Liste.
+          </div>
+        )}
 
         <div style={{ ...card, padding: 0 }}>
           {users === null ? (
@@ -240,9 +282,8 @@ export function AdminMain() {
                   {!u.active && <span style={badge('var(--lt-err)')}>Inaktiv</span>}
                   {isSelf && <span style={{ fontSize: 10.5, color: 'var(--lt-fg-4)' }}>(Sie)</span>}
                   <span style={{ flex: 1 }} />
-                  <input value={draft} onChange={(e) => setDrafts((d) => ({ ...d, [u.id]: e.target.value }))}
-                    placeholder="wbdb-Principal (leer = kein Zugriff)"
-                    style={{ ...inputStyle, width: 220, fontFamily: 'var(--lt-font-mono)' }} />
+                  <PrincipalField value={draft} onChange={(v) => setDrafts((d) => ({ ...d, [u.id]: v }))}
+                    principals={principals} principalsAvailable={principalsAvailable} style={{ width: 220 }} />
                   {dirty && (
                     <button onClick={() => savePrincipal(u.id)} disabled={busyId === u.id} style={btnPrimary}>
                       {busyId === u.id ? '…' : 'Speichern'}

@@ -75,8 +75,16 @@ export interface ScopeResult {
   scope: Record<string, unknown>[]
 }
 
+export interface Principal {
+  principal_id: string
+  kind: string
+  label: string
+  active: boolean
+}
+
 export const adminApi = {
   listUsers: () => api.get<AdminUser[]>('/admin/users'),
+  listPrincipals: () => api.get<Principal[]>('/admin/principals'),
   createUser: (username: string, password: string, wbdbPrincipalId: string, isAdmin: boolean) =>
     api.post<AdminUser>('/admin/users', {
       username, password, wbdb_principal_id: wbdbPrincipalId || null, is_admin: isAdmin,
