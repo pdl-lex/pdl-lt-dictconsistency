@@ -5,14 +5,13 @@ routers/db_index.py und routers/admin.py — hier nur der dateisystembasierte We
 (Server-Pfad, Upload)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from ...auth.deps import get_current_user
 from ...core import data
 from .._helpers import resolve_directory
 
-router = APIRouter(prefix="/data", tags=["data"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/data", tags=["data"])
 
 
 class ScanRequest(BaseModel):

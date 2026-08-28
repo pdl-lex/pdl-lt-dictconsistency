@@ -12,6 +12,7 @@ import { MobileWorkbench } from './layout/Mobile'
 import { ApiInfoConfigPane, ApiInfoMain } from './modules/apiInfo'
 import { IntroConfigPane, IntroMain } from './modules/intro'
 import { StructureConfigPane, StructureMain, StructureProvider, useStructure } from './modules/structure'
+import { ArtikelsucheConfigPane, ArtikelsucheMain, ArtikelsucheProvider } from './modules/artikelsuche'
 import { useIsMobile } from './design/useIsMobile'
 import { AuthProvider, useAuth } from './state/auth'
 import { WorkbenchProvider, useWorkbench } from './state/workbench'
@@ -48,6 +49,7 @@ function Workbench() {
   const isAdmin = activeId === 'admin'
   const isStructure = activeId === 'structure'
   const isIntro = activeId === 'intro'
+  const isArtikelsuche = activeId === 'artikelsuche'
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -55,13 +57,13 @@ function Workbench() {
       else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
         e.preventDefault()
         if (isStructure) void structure.analyze()
-        else if (!isApi && !isAdmin && !isIntro) run()
+        else if (!isApi && !isAdmin && !isIntro && !isArtikelsuche) run()
       }
       else if (e.key === 'Escape') setCmdOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [run, isApi, isAdmin, isIntro, isStructure, structure])
+  }, [run, isApi, isAdmin, isIntro, isStructure, isArtikelsuche, structure])
 
   if (isMobile) {
     return (
@@ -80,8 +82,8 @@ function Workbench() {
     }}>
       <Header onOpenPalette={() => setCmdOpen(true)} />
       <Rail />
-      {isAdmin ? <AdminConfigPane layout={layout} /> : isApi ? <ApiInfoConfigPane layout={layout} /> : isStructure ? <StructureConfigPane layout={layout} /> : isIntro ? <IntroConfigPane layout={layout} /> : <ConfigPane layout={layout} />}
-      {isAdmin ? <AdminMain /> : isApi ? <ApiInfoMain /> : isStructure ? <StructureMain /> : isIntro ? <IntroMain /> : <ResultsPane />}
+      {isAdmin ? <AdminConfigPane layout={layout} /> : isApi ? <ApiInfoConfigPane layout={layout} /> : isStructure ? <StructureConfigPane layout={layout} /> : isIntro ? <IntroConfigPane layout={layout} /> : isArtikelsuche ? <ArtikelsucheConfigPane layout={layout} /> : <ConfigPane layout={layout} />}
+      {isAdmin ? <AdminMain /> : isApi ? <ApiInfoMain /> : isStructure ? <StructureMain /> : isIntro ? <IntroMain /> : isArtikelsuche ? <ArtikelsucheMain /> : <ResultsPane />}
       <StatusBar />
       {cmdOpen && <CommandPalette onClose={() => setCmdOpen(false)} />}
       {dataDialogOpen && <DataDialog />}
@@ -96,7 +98,9 @@ function Gate() {
   return (
     <WorkbenchProvider>
       <StructureProvider>
-        <Workbench />
+        <ArtikelsucheProvider>
+          <Workbench />
+        </ArtikelsucheProvider>
       </StructureProvider>
     </WorkbenchProvider>
   )

@@ -23,7 +23,7 @@ _MAX_AGE_SECONDS = 3600  # alte Jobs (abgeschlossen oder verwaist) verwerfen
 class LoadJob:
     id: str
     total: int
-    owner_user_id: int
+    owner_user_id: int | None
     done: int = 0
     status: str = "running"  # running | ok | error
     error: str | None = None
@@ -35,7 +35,7 @@ _jobs: dict[str, LoadJob] = {}
 _lock = threading.Lock()
 
 
-def create_job(total: int, *, owner_user_id: int) -> LoadJob:
+def create_job(total: int, *, owner_user_id: int | None) -> LoadJob:
     job = LoadJob(id=uuid.uuid4().hex, total=total, owner_user_id=owner_user_id)
     with _lock:
         _jobs[job.id] = job

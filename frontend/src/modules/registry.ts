@@ -2,9 +2,10 @@
 // Navigation, Konfigurator-Pane und Ergebnis-Tabelle generisch.
 import { api, pollJob, type CheckResult, type ValidatorResponse } from '../api/client'
 
-export type FieldType = 'text' | 'select' | 'checkbox' | 'tags' | 'pairs'
+export type FieldType = 'text' | 'select' | 'checkbox' | 'tags' | 'pairs' | 'wordlist'
 
 export interface TagAttrPair { tag: string; attribute: string }
+export interface SpellingPair { alt: string; neu: string }
 
 export interface Field {
   type: FieldType
@@ -17,7 +18,7 @@ export interface Field {
   loadTagsPath?: string
   /** Endpunkt, der Attribut-Vorschläge für ein Tag liefert (für type: 'pairs'). */
   loadAttrsPath?: string
-  default: string | boolean | string[] | TagAttrPair[]
+  default: string | boolean | string[] | TagAttrPair[] | SpellingPair[]
 }
 
 export interface Column {
@@ -53,7 +54,7 @@ export interface ModuleDef {
   runJob?: (directory: string, config: Config, onProgress: (p: JobProgress) => void) => Promise<CheckResult>
 }
 
-export type Config = Record<string, string | boolean | string[] | TagAttrPair[]>
+export type Config = Record<string, string | boolean | string[] | TagAttrPair[] | SpellingPair[]>
 
 const COMMON_TAIL: Column[] = [
   { key: 'quelle', label: 'Gedruckte Ausgabe', width: 150, mono: true },
@@ -194,14 +195,16 @@ export const MODULES: ModuleDef[] = [
     description: 'Sucht hochdeutsche Reformschreibungen in Definitionen, Etymologie, Literatur.',
     fields: [
       { type: 'tags', key: 'included_tags', label: 'Tags', loadTagsPath: '/checks/spelling/tags', default: [] },
-      { type: 'select', key: 'custom_list_mode', label: 'Wortlisten-Modus', default: 'extend', options: ['extend', 'replace'] },
+      { type: 'wordlist', key: 'custom_spellings', label: 'Wortliste', default: [] },
+      { type: 'select', key: 'custom_list_mode', label: 'Wortlisten-Modus', default: 'Ergänzen', options: ['Ergänzen', 'Ersetzen'] },
     ],
     columns: [...HEAD, { key: 'tag', label: 'Tag', width: 120, chip: true },
       { key: 'gefunden', label: 'Gefunden', width: 122, mono: true, danger: true },
       { key: 'vorschlag', label: 'Vorschlag', width: 150, diffWith: 'gefunden' },
       { key: 'kontext', label: 'Kontext', italic: true }, ...COMMON_TAIL],
     run: (directory, c) => api.post<CheckResult>('/checks/spelling/search', {
-      directory, included_tags: c.included_tags, custom_spellings: [], custom_list_mode: c.custom_list_mode,
+      directory, included_tags: c.included_tags, custom_spellings: c.custom_spellings,
+      custom_list_mode: c.custom_list_mode === 'Ersetzen' ? 'replace' : 'extend',
     }),
   },
 ]
@@ -214,7 +217,9 @@ export function moduleById(id: string): ModuleDef | undefined {
 
 export function defaultConfig(m: ModuleDef): Config {
   const c: Config = {}
-  for (const f of m.fields) c[f.key] = Array.isArray(f.default) ? ([...f.default] as string[] | TagAttrPair[]) : f.default
+  for (const f of m.fields) {
+    c[f.key] = Array.isArray(f.default) ? ([...f.default] as string[] | TagAttrPair[] | SpellingPair[]) : f.default
+  }
   return c
 }
 

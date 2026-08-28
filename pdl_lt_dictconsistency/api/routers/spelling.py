@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from ...auth.deps import get_current_user
 from ...core.spelling import (
     BUILTIN_SPELLINGS,
     DEFAULT_EXCLUDED_TAGS,
@@ -16,7 +15,7 @@ from ...core.spelling import (
 from .._helpers import resolve_files
 from ..schemas import FileSelection, GenericCheckResponse
 
-router = APIRouter(prefix="/checks/spelling", tags=["checks"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/checks/spelling", tags=["checks"])
 
 
 class SpellingPair(BaseModel):

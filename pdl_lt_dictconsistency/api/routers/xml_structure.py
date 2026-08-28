@@ -1,14 +1,13 @@
 """API-Endpunkt für die XML-Strukturanalyse."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from ...auth.deps import get_current_user
 from ...core.xml_structure import run_structure
 from .._helpers import resolve_files, timed_response
 from ..schemas import FileSelection, GenericCheckResponse
 
-router = APIRouter(prefix="/checks", tags=["checks"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/checks", tags=["checks"])
 
 
 @router.post("/structure", response_model=GenericCheckResponse)

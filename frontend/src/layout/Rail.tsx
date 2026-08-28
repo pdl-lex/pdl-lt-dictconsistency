@@ -15,15 +15,17 @@ export function buildMenu(isAdmin: boolean): MenuGroup[] {
   const order = ['Start', 'XML', 'Stil und Schreibung', 'LLM', ...(isAdmin ? ['Verwaltung'] : [])]
   const staticItems: Record<string, MenuItem[]> = {
     Start: [{ id: 'intro', label: 'Einführung' }, { id: 'data', label: 'Daten' },
-      { id: 'api', label: 'API' }],
+      { id: 'api', label: 'API' }, { id: 'artikelsuche', label: 'Artikelsuche' }],
     LLM: [{ id: 'chat', label: 'Chat', disabled: true }, { id: 'ocr', label: 'Texterkennung (OCR)', disabled: true },
       { id: 'settings', label: 'LLM-Einstellungen', disabled: true }],
     Verwaltung: [{ id: 'admin', label: 'Admin-Bereich' }],
   }
   // Sonderseiten ohne Tabellen-Ergebnis (eigene Modul-Def wäre hier unpassend,
-  // siehe modules/structure.tsx) hängen sich an eine Modul-Gruppe an.
-  const extraItems: Record<string, MenuItem[]> = {
-    XML: [{ id: 'structure', label: 'Strukturanalyse' }],
+  // siehe modules/structure.tsx) hängen sich an eine Modul-Gruppe an, direkt
+  // nach dem über `after` benannten Eintrag (Strukturanalyse: zweite Position,
+  // gleich nach dem Validator).
+  const extraItems: Record<string, (MenuItem & { after?: string })[]> = {
+    XML: [{ id: 'structure', label: 'Strukturanalyse', after: 'validator' }],
   }
   // "Verweise" soll der allerletzte Eintrag unter XML sein, auch nach der
   // Strukturanalyse-Sonderseite — deshalb aus der normalen MODULES-Reihenfolge
@@ -32,11 +34,14 @@ export function buildMenu(isAdmin: boolean): MenuGroup[] {
   return order.map((group) => {
     const trailingIds = new Set(trailingItems[group] ?? [])
     const groupModules = MODULES.filter((m) => m.group === group).map((m) => ({ id: m.id, label: m.label }))
-    const items = staticItems[group] ?? [
-      ...groupModules.filter((m) => !trailingIds.has(m.id)),
-      ...(extraItems[group] ?? []),
-      ...groupModules.filter((m) => trailingIds.has(m.id)),
-    ]
+    let items = staticItems[group] ?? groupModules.filter((m) => !trailingIds.has(m.id))
+    if (!staticItems[group]) {
+      for (const { after, ...extra } of extraItems[group] ?? []) {
+        const idx = items.findIndex((m) => m.id === after)
+        items = idx >= 0 ? [...items.slice(0, idx + 1), extra, ...items.slice(idx + 1)] : [...items, extra]
+      }
+      items = [...items, ...groupModules.filter((m) => trailingIds.has(m.id))]
+    }
     return { group, icon: RAIL_ICON[group], items }
   })
 }

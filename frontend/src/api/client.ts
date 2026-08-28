@@ -141,6 +141,15 @@ export const dataApi = {
       `/data/db-index/letter?resource_id=${encodeURIComponent(resourceId)}&letter=${encodeURIComponent(letter)}`
     ),
   dbIndexSearch: (q: string) => api.get<DbSearchHit[]>(`/data/db-index/search?q=${encodeURIComponent(q)}`),
+  dbIndexSearchFiles: (q: string, resourceIds: string[] = []) => {
+    const params = new URLSearchParams({ q })
+    for (const id of resourceIds) params.append('resource_ids', id)
+    return api.get<DbSearchHit[]>(`/data/db-index/search-files?${params.toString()}`)
+  },
+  dbIndexArticle: (resourceId: string, sourcePath: string) =>
+    api.get<{ content: string }>(
+      `/data/db-index/article?resource_id=${encodeURIComponent(resourceId)}&source_path=${encodeURIComponent(sourcePath)}`
+    ),
   dbLoadSelection: (selection: DbSelection) => api.post<LoadJobHandle>('/data/db-load', selection),
   dbLoadStatus: (jobId: string) => api.get<LoadJobStatus>(`/data/db-load/${jobId}`),
   fileContent: (directory: string, subdir: string, filename: string) =>

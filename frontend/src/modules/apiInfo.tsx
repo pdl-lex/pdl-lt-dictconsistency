@@ -191,6 +191,10 @@ export function ApiInfoMain() {
           500 = interner Fehler) mit Body <code>{'{"detail": "…"}'}</code>. Prüfungen antworten
           einheitlich mit:
           <div style={{ marginTop: 8 }}><CodeBlock code={genericResponse} /></div>
+          Ausnahme: länger laufende Endpunkte (<code>/checks/references/run</code>,{' '}
+          <code>/data/db-load</code>) starten nur einen Hintergrund-Job und antworten sofort (202)
+          mit <code>job_id</code> — das obige Ergebnis kommt dann erst im{' '}
+          <code>result</code>-Feld des zugehörigen Job-Status-Endpunkts.
         </Callout>
 
         <Endpoint method="POST" path="/api/auth/login">
@@ -252,6 +256,49 @@ export function ApiInfoMain() {
           <CodeBlock label="Anfrage" code={`curl ${BASE}/api/data/datasources`} />
         </Endpoint>
 
+        <Endpoint method="GET" path="/api/data/db-index/tree">
+          <p style={p0}>
+            wbdb-Artikelbaum aus dem lokalen Index-Cache (Ressource → Buchstabe → Artikel),
+            gefiltert auf den wbdb-Principal des angemeldeten Nutzers; ohne zugeordneten Principal
+            403, ohne aufgebauten Index 409 (ein Admin muss ihn per{' '}
+            <code>POST /api/admin/wbdb-index/rebuild</code> anlegen). Weitere Endpunkte der
+            gleichen Familie: <code>GET …/letter?resource_id=…&amp;letter=…</code> (Artikel eines
+            Buchstabens, lazy beim Aufklappen), <code>GET …/search?q=…</code> (Lemma/Artikel-ID),
+            {' '}<code>GET …/search-files?q=…&amp;resource_ids=…</code> (Dateiname, Artikelsuche)
+            und <code>GET …/article?resource_id=…&amp;source_path=…</code> (Roh-XML eines
+            einzelnen Artikels — live gegen wbdb, RLS-geprüft, nicht aus dem Cache).
+          </p>
+          <CodeBlock label="Anfrage" code={`curl ${BASE}/api/data/db-index/tree -b cookies.txt`} />
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/data/db-load">
+          <p style={p0}>
+            Baum-Auswahl aus dem wbdb-Artikelbestand laden — ganze Ressourcen
+            (<code>resource_ids</code>), Buchstaben (<code>resource_letters</code>, Paare aus
+            Ressource + Buchstabe) oder einzelne Artikel (<code>articles</code>). Läuft live gegen
+            wbdb (RLS-geprüft) als Hintergrund-Job: Antwort (202) enthält nur <code>job_id</code>;
+            Fortschritt und Ergebnis (<code>directory</code> der geladenen Dateien, wie bei{' '}
+            <code>/data/scan</code>) über <code>GET /api/data/db-load/{'{job_id}'}</code>, bis
+            {' '}<code>status</code> "ok" oder "error" ist.
+          </p>
+          <CodeBlock label="Anfrage" code={`curl -X POST ${BASE}/api/data/db-load -b cookies.txt \\
+  -H "Content-Type: application/json" \\
+  -d '{"resource_letters": [["bwb", "A"]]}'`} />
+          <CodeBlock label="Antwort (Job-Status)" code={`{
+  "status": "ok", "done": 812, "total": 812, "error": null,
+  "result": { "directory": "…", "file_count": 812, "files": [ "…" ] }
+}`} />
+        </Endpoint>
+
+        <Endpoint method="GET" path="/api/data/file-content">
+          <p style={p0}>
+            Rohinhalt einer einzelnen bereits gescannten Datei (<code>directory</code>,{' '}
+            <code>subdir</code>, <code>filename</code>) — für die Fundstellen-Vorschau in
+            Ergebnistabellen. Unterliegt derselben Datenwurzeln-Prüfung wie <code>/data/scan</code>.
+          </p>
+          <CodeBlock label="Anfrage" code={`curl "${BASE}/api/data/file-content?directory=${dir.replace(/\\/g, '/')}&subdir=A&filename=Abriss.xml" -b cookies.txt`} />
+        </Endpoint>
+
         <Endpoint method="POST" path="/api/checks/validator">
           <p style={p0}>
             XML-Validierung. <code>validation_type</code>: <code>"Wohlgeformtheit (Well-formed XML)"</code>
@@ -264,6 +311,18 @@ export function ApiInfoMain() {
     "directory": "${dir.replace(/\\/g, '/')}",
     "validation_type": "Wohlgeformtheit (Well-formed XML)"
   }'`} />
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/checks/structure">
+          <p style={p0}>
+            Führt den XML-Baum aller ausgewählten Dateien zusammen: pro Pfad ein Knoten mit den
+            vorkommenden Attributen (samt Beispielwerten) und Beispiel-Textinhalten. Optional auf
+            eine einzelne Datei einschränkbar (<code>files</code>), um deren Inhalte im selben Baum
+            zu markieren — Grundlage der Strukturanalyse-Seite in der Oberfläche.
+          </p>
+          <CodeBlock label="Anfrage" code={`curl -X POST ${BASE}/api/checks/structure \\
+  -H "Content-Type: application/json" \\
+  -d '{"directory": "${dir.replace(/\\/g, '/')}"}'`} />
         </Endpoint>
 
         <Endpoint method="POST" path="/api/checks/pathfinder">
@@ -333,6 +392,33 @@ export function ApiInfoMain() {
     "search_text": "",
     "include_whitespace": true
   }'`} />
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/checks/references/run">
+          <p style={p0}>
+            Verweisprüfung starten (BDO-Artikelreferenzen live gegen wbdb und/oder http(s)-Links
+            per echtem Request). Läuft als zweiphasiger Hintergrund-Job (erst Fundstellen-Scan,
+            dann Zielprüfung) — Antwort (202) enthält nur <code>job_id</code>. <code>sources</code>{' '}
+            ist eine Liste aus <code>tag</code> (leer = beliebiger Tag) + <code>attribute</code>;
+            {' '}<code>check_http_links</code> prüft zusätzlich alle http(s)-Links in Text und
+            Attributen; <code>include_fehlt_marked</code> schließt bereits als fehlend markierte
+            Verweise (<code>@fehlt="ja"</code>) mit ein. Fortschritt/Ergebnis über{' '}
+            <code>GET /api/checks/references/run/{'{job_id}'}</code>, bis <code>status</code> "ok"
+            oder "error" ist (<code>phase</code>: "scanning" oder "checking"); die Ergebnisliste
+            enthält nur kaputte Verweise.
+          </p>
+          <CodeBlock label="Anfrage" code={`curl -X POST ${BASE}/api/checks/references/run -b cookies.txt \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "directory": "${dir.replace(/\\/g, '/')}",
+    "sources": [{"tag": "verweis", "attribute": "ziel"}],
+    "check_http_links": false,
+    "include_fehlt_marked": true
+  }'`} />
+          <CodeBlock label="Antwort (Job-Status)" code={`{
+  "status": "ok", "phase": "checking", "done": 1204, "total": 1204, "error": null,
+  "result": { "results": [ "…" ], "files_checked": 3842, "result_count": 17, "duration_ms": 15230 }
+}`} />
         </Endpoint>
 
         <Endpoint method="POST" path="/api/checks/spelling/search">

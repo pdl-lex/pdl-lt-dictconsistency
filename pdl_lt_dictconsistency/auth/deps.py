@@ -14,6 +14,13 @@ def get_current_user(request: Request) -> dict:
     return user
 
 
+def get_current_user_optional(request: Request) -> dict | None:
+    """Wie `get_current_user`, aber ohne 401 — für Endpunkte, die auch ohne
+    Login nutzbar sind (anonymer Zugriff auf öffentliche Daten)."""
+    token = request.cookies.get(COOKIE_NAME)
+    return resolve_session(token) if token else None
+
+
 def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if not user["is_admin"]:
         raise HTTPException(403, "Nur für Administratoren.")

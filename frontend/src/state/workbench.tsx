@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CheckResult } from '../api/client'
 import { ApiError } from '../api/client'
-import { MODULES, defaultConfig, moduleById, type Config, type JobProgress, type ModuleDef, type TagAttrPair } from '../modules/registry'
+import { MODULES, defaultConfig, moduleById, type Config, type JobProgress, type ModuleDef, type SpellingPair, type TagAttrPair } from '../modules/registry'
 
 export type LayoutMode = 'left' | 'right' | 'bottom'
 
@@ -26,7 +26,7 @@ interface WorkbenchState {
   loginDialogOpen: boolean
   setLoginDialogOpen: (v: boolean) => void
   config: Config
-  setField: (key: string, value: string | boolean | string[] | TagAttrPair[]) => void
+  setField: (key: string, value: string | boolean | string[] | TagAttrPair[] | SpellingPair[]) => void
   result: CheckResult | null
   running: boolean
   error: string
@@ -62,7 +62,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { localStorage.setItem('lt.directory', directory) }, [directory])
 
-  const setField = useCallback((key: string, value: string | boolean | string[] | TagAttrPair[]) => {
+  const setField = useCallback((key: string, value: string | boolean | string[] | TagAttrPair[] | SpellingPair[]) => {
     setConfigs((prev) => {
       const base = prev[activeId] ?? defaultConfig(module)
       return { ...prev, [activeId]: { ...base, [key]: value } }

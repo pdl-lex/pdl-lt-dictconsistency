@@ -10,9 +10,12 @@ from pdl_lt_dictconsistency.core import data as core_data
 from pdl_lt_dictconsistency.core.validator import WELLFORMED
 
 
-def test_unauthenticated_request_401(client):
+def test_unauthenticated_request_allowed(client):
+    """Nur admin/ und /auth/me verlangen Login — die Prüf- und Daten-Endpunkte
+    sind auch anonym nutzbar (siehe test_db_index_routes_work_without_login
+    für den wbdb-'anon'-Fall)."""
     resp = client.get("/api/data/datasources")
-    assert resp.status_code == 401
+    assert resp.status_code == 200
 
 
 def test_scan_directory_lists_valid_xml_only(logged_in_client, sample_xml_dir):
@@ -123,11 +126,14 @@ def test_db_index_tree_requires_principal_without_touching_wbdb(logged_in_client
     assert resp.status_code == 403
 
 
-def test_db_index_routes_require_login(client):
-    assert client.get("/api/data/db-index/tree").status_code == 401
-    assert client.get("/api/data/db-index/letter", params={"resource_id": "wbf", "letter": "A"}).status_code == 401
-    assert client.get("/api/data/db-index/search", params={"q": "abc"}).status_code == 401
-    assert client.post("/api/data/db-load", json={"resource_ids": ["wbf"]}).status_code == 401
+def test_db_index_routes_work_without_login(client):
+    """Anonyme Anfragen laufen unter dem öffentlichen 'anon'-Principal statt mit
+    401 zu scheitern — ohne aufgebauten Index bleibt nur 409 übrig, genau wie
+    für angemeldete Nutzer."""
+    assert client.get("/api/data/db-index/tree").status_code == 409
+    assert client.get("/api/data/db-index/letter", params={"resource_id": "wbf", "letter": "A"}).status_code == 409
+    assert client.get("/api/data/db-index/search", params={"q": "abc"}).status_code == 409
+    assert client.post("/api/data/db-load", json={"resource_ids": ["wbf"]}).status_code == 409
 
 
 def test_wbdb_index_rebuild_requires_admin(logged_in_client):
@@ -168,12 +174,13 @@ def test_file_content_blocks_path_escape(logged_in_client, sample_xml_dir):
     assert resp.status_code in (403, 404)
 
 
-def test_file_content_requires_login(client, sample_xml_dir):
+def test_file_content_works_without_login(client, sample_xml_dir):
     resp = client.get(
         "/api/data/file-content",
         params={"directory": str(sample_xml_dir), "subdir": ".", "filename": "gut.xml"},
     )
-    assert resp.status_code == 401
+    assert resp.status_code == 200
+    assert "Katze" in resp.json()["content"]
 
 
 def test_validator_check_end_to_end(logged_in_client, sample_xml_dir):

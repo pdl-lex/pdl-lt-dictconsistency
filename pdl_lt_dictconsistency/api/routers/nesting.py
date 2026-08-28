@@ -1,16 +1,15 @@
 """API-Endpunkt für die Verschachtelungsanalyse."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
-from ...auth.deps import get_current_user
 from ...core.common import InvalidExpressionError
 from ...core.nesting import MODES, run_nesting
 from .._helpers import resolve_files, timed_response
 from ..schemas import FileSelection, GenericCheckResponse
 
-router = APIRouter(prefix="/checks", tags=["checks"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/checks", tags=["checks"])
 
 
 class NestingRequest(FileSelection):

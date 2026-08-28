@@ -273,6 +273,43 @@ def search(principal: str, q: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def search_files(principal: str, q: str, resource_ids: Iterable[str] | None = None) -> list[dict]:
+    """Substring-Suche über den Dateinamen (letztes Segment von `source_path`)
+    — Grundlage der Artikelsuche. Anders als `search()` (Lemma/Artikel-ID) geht
+    es hier um den Dateinamen selbst, den der Cache schon kennt; kein
+    zusätzlicher Spaltenindex nötig, da die Filterung nach dem Basisnamen
+    (statt dem vollen Pfad) pro Suche in Python passiert — die Zeilenzahl pro
+    Scope bleibt klein genug (siehe `_scope_clause`-Kommentar), dass das nicht
+    ins Gewicht fällt.
+    """
+    q = q.strip().lower()
+    if not q:
+        return []
+    scope = _current_scope(principal)
+    if not scope:
+        return []
+    with local_db.connect() as conn:
+        build_id = _require_current_build(conn)
+        clause, params = _scope_clause(scope)
+        sql = (
+            f"SELECT resource_id, letter, source_path, article_id, lemma FROM wbdb_index_article "
+            f"WHERE build_id = ? AND ({clause})"
+        )
+        args: list = [build_id, *params]
+        ids = [r for r in (resource_ids or []) if r]
+        if ids:
+            sql += f" AND resource_id IN ({','.join('?' for _ in ids)})"
+            args.extend(ids)
+        rows = conn.execute(sql, args).fetchall()
+
+    hits = [
+        dict(r) for r in rows
+        if q in r["source_path"].rsplit("/", 1)[-1].lower()
+    ]
+    hits.sort(key=lambda h: (h["resource_id"], h["letter"], (h["lemma"] or h["article_id"]).lower()))
+    return hits[:SEARCH_LIMIT]
+
+
 def resolve_selection(
     principal: str,
     resource_ids: Iterable[str],

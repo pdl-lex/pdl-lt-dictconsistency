@@ -7,16 +7,15 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import Field
 
-from ...auth.deps import get_current_user
 from ...core.common import InvalidExpressionError
 from ...core.uniqueness import MODES, run_uniqueness
 from .._helpers import resolve_files
 from ..schemas import CheckResponse, FileSelection
 
-router = APIRouter(prefix="/checks", tags=["checks"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/checks", tags=["checks"])
 
 
 class UniquenessRequest(FileSelection):

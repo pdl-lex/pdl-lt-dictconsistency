@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from ...auth.deps import get_current_user
 from ...core.common import InvalidExpressionError
 from ...core.tag_content import (
     collect_attr_values,
@@ -17,7 +16,7 @@ from ...core.tag_content import (
 from .._helpers import resolve_files
 from ..schemas import FileSelection, GenericCheckResponse
 
-router = APIRouter(prefix="/checks/tag-content", tags=["checks"], dependencies=[Depends(get_current_user)])
+router = APIRouter(prefix="/checks/tag-content", tags=["checks"])
 
 
 class TagContentRequest(FileSelection):

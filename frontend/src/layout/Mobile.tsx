@@ -9,6 +9,7 @@ import { Diff, HBar, Sparkbars, type SparkDatum } from '../design/widgets'
 import { ApiInfoConfig, ApiInfoMain } from '../modules/apiInfo'
 import { IntroConfig, IntroMain } from '../modules/intro'
 import { StructureConfig, StructureMain, useStructure } from '../modules/structure'
+import { ArtikelsucheConfig, ArtikelsucheMain } from '../modules/artikelsuche'
 import { AdminConfig, AdminMain } from './AdminView'
 import type { Column } from '../modules/registry'
 import { useAuth } from '../state/auth'
@@ -441,7 +442,8 @@ export function MobileWorkbench() {
   const isAdmin = activeId === 'admin'
   const isStructure = activeId === 'structure'
   const isIntro = activeId === 'intro'
-  const title = isApi ? 'API' : isAdmin ? 'Admin-Bereich' : isStructure ? 'Strukturanalyse' : isIntro ? 'Einführung' : module.title
+  const isArtikelsuche = activeId === 'artikelsuche'
+  const title = isApi ? 'API' : isAdmin ? 'Admin-Bereich' : isStructure ? 'Strukturanalyse' : isIntro ? 'Einführung' : isArtikelsuche ? 'Artikelsuche' : module.title
   const files = result ? String(result.files_checked) : fileCount != null ? String(fileCount) : '–'
 
   const panes = order === 'params'
@@ -481,7 +483,7 @@ export function MobileWorkbench() {
           }}>
             <Icon name="play" size={12} /> {structure.loading ? 'Analysiert…' : 'Analysieren'}
           </button>
-        ) : !isApi && !isAdmin && !isIntro && (
+        ) : !isApi && !isAdmin && !isIntro && !isArtikelsuche && (
           <button onClick={run} disabled={running} style={{
             display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 14px',
             marginRight: 4, background: 'var(--lt-primary)', color: 'var(--lt-on-primary)',
@@ -521,6 +523,13 @@ export function MobileWorkbench() {
               <IntroConfig />
             </div>
             <IntroMain />
+          </>
+        ) : isArtikelsuche ? (
+          <>
+            <div style={{ background: 'var(--lt-bg-2)', borderBottom: '1px solid var(--lt-line-1)' }}>
+              <ArtikelsucheConfig />
+            </div>
+            <ArtikelsucheMain />
           </>
         ) : panes}
       </div>

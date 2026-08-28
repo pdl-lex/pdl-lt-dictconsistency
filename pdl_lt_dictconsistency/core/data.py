@@ -345,6 +345,24 @@ def materialize_db_selection(
     )
 
 
+def load_article_content(resource_id: str, source_path: str, *, principal: str) -> str:
+    """Rohinhalt genau eines Artikels direkt aus wbdb lesen (für die
+    Artikelsuche-Vorschau) — anders als `materialize_db_selection` wird nichts
+    auf die Platte geschrieben, der Inhalt geht direkt in die Antwort. Gleiche
+    Query/Index-Nutzung wie beim Massenladen (siehe Kommentar bei
+    `_MATERIALIZE_BY_PATH_QUERY`), bleibt live und RLS-geprüft.
+    """
+    from ..wbdb.connection import als, verbindung  # lazy: core bleibt ohne wbdb nutzbar
+
+    key = f"{resource_id}{_PAIR_SEP}{source_path}"
+    with verbindung() as conn, als(conn, principal):
+        row = conn.execute(_MATERIALIZE_BY_PATH_QUERY, {"keys": [key]}).fetchone()
+    if row is None:
+        raise FileNotFoundError(source_path)
+    _, _, _, content = row
+    return bytes(content).decode("utf-8", errors="replace")
+
+
 # ── Datenquellen (datasources.json) ─────────────────────────────────────────
 
 def _make_key(name: str) -> str:

@@ -19,12 +19,16 @@ _pool: ConnectionPool | None = None
 
 
 def default_principal() -> str:
-    """WBDB_PRINCIPAL-Fallback für nicht-interaktive Nutzung (z. B. eigene Skripte).
+    """WBDB_PRINCIPAL-Fallback (Vorgabe 'anon') für Aufrufe ohne eigenen,
+    zugeordneten Principal.
 
-    Seit Phase 3 (Pro-Nutzer-Principal) verwendet die App selbst diese Funktion
-    nicht mehr — jeder angemeldete Nutzer bekommt seinen eigenen, in `auth.users`
-    hinterlegten Principal; ohne Zuordnung gibt es keinen DB-Zugriff, kein
-    stiller Fallback auf 'anon'.
+    Seit Phase 3 (Pro-Nutzer-Principal) bekommt jeder angemeldete Nutzer
+    seinen eigenen, in `auth.users` hinterlegten Principal; ohne Zuordnung
+    gibt es keinen DB-Zugriff, kein stiller Fallback auf 'anon' — siehe
+    `api/routers/db_index.py::_resolve_principal()`. Für Aufrufe **ohne**
+    angemeldeten Nutzer (anonymer Browser-Zugriff, eigene Skripte) ist dieser
+    Fallback dagegen gewollt: wbdb kennt 'anon' selbst als Principal für die
+    veröffentlichten Wörterbücher (siehe setup/Readme Access WBDB.md §2).
     """
     return os.environ.get("WBDB_PRINCIPAL", "anon")
 
