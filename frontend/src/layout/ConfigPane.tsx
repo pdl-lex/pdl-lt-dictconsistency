@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { Icon } from '../design/icons'
 import { kc, Segmented } from '../design/widgets'
-import { loadTags, type Field } from '../modules/registry'
+import { loadAttrs, loadTags, type Field, type TagAttrPair } from '../modules/registry'
 import { useWorkbench, type LayoutMode } from '../state/workbench'
 
 const inputStyle: CSSProperties = {
@@ -74,9 +74,81 @@ function TagsField({ field }: { field: Field }) {
   )
 }
 
+function PairsField({ field }: { field: Field }) {
+  const { config, setField, directory } = useWorkbench()
+  const value = (config[field.key] as TagAttrPair[]) ?? []
+  const [tagOptions, setTagOptions] = useState<string[]>([])
+  const [attrOptions, setAttrOptions] = useState<Record<string, string[]>>({})
+  const [loadingTags, setLoadingTags] = useState(false)
+  const [err, setErr] = useState('')
+
+  const loadTagOptions = async () => {
+    if (!directory.trim() || !field.loadTagsPath) { setErr('Erst Datenpfad angeben.'); return }
+    setLoadingTags(true); setErr('')
+    try { setTagOptions(await loadTags(field.loadTagsPath, directory)) }
+    catch (e) { setErr(String(e)) }
+    finally { setLoadingTags(false) }
+  }
+
+  const ensureAttrOptions = async (tag: string) => {
+    if (!directory.trim() || !field.loadAttrsPath || !tag || attrOptions[tag]) return
+    try {
+      const attrs = await loadAttrs(field.loadAttrsPath, directory, tag)
+      setAttrOptions((prev) => ({ ...prev, [tag]: attrs }))
+    } catch { /* Vorschläge sind optional — Freitext bleibt möglich */ }
+  }
+
+  const updateRow = (i: number, patch: Partial<TagAttrPair>) =>
+    setField(field.key, value.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  const addRow = () => setField(field.key, [...value, { tag: '', attribute: '' }])
+  const removeRow = (i: number) => setField(field.key, value.filter((_, idx) => idx !== i))
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, flex: 1 }}>{field.label}</span>
+        {field.loadTagsPath && (
+          <button onClick={loadTagOptions} disabled={loadingTags} style={{
+            fontSize: 11, padding: '3px 8px', background: 'var(--lt-bg-1)', border: '1px solid var(--lt-line-1)',
+            borderRadius: 'var(--lt-r-sm)', color: 'var(--lt-fg-2)', cursor: 'pointer',
+          }}>{loadingTags ? 'lädt…' : 'Tags laden'}</button>
+        )}
+      </div>
+      {err && <div style={{ fontSize: 11, color: 'var(--lt-err)', marginBottom: 6 }}>{err}</div>}
+      <datalist id={`${field.key}-tags`}>
+        {tagOptions.map((t) => <option key={t} value={t} />)}
+      </datalist>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {value.map((row, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <input value={row.tag} list={`${field.key}-tags`} placeholder="Tag (leer = alle)"
+              onChange={(e) => updateRow(i, { tag: e.target.value })}
+              style={{ ...inputStyle, flex: 1, fontFamily: 'var(--lt-font-mono)' }} />
+            <input value={row.attribute} list={`${field.key}-attrs-${row.tag}`} placeholder="Attribut"
+              onFocus={() => ensureAttrOptions(row.tag)}
+              onChange={(e) => updateRow(i, { attribute: e.target.value })}
+              style={{ ...inputStyle, flex: 1, fontFamily: 'var(--lt-font-mono)' }} />
+            <datalist id={`${field.key}-attrs-${row.tag}`}>
+              {(attrOptions[row.tag] ?? []).map((a) => <option key={a} value={a} />)}
+            </datalist>
+            <Icon name="x" size={12} style={{ opacity: 0.5, cursor: 'pointer', flexShrink: 0 }} onClick={() => removeRow(i)} />
+          </div>
+        ))}
+        {value.length === 0 && <span style={{ fontSize: 11, color: 'var(--lt-fg-4)' }}>Keine Quellen gewählt.</span>}
+      </div>
+      <button onClick={addRow} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8,
+        fontSize: 11, padding: '3px 8px', background: 'var(--lt-bg-1)', border: '1px solid var(--lt-line-1)',
+        borderRadius: 'var(--lt-r-sm)', color: 'var(--lt-fg-2)', cursor: 'pointer',
+      }}><Icon name="plus" size={10} /> Quelle hinzufügen</button>
+    </div>
+  )
+}
+
 export function FieldRenderer({ field }: { field: Field }) {
   const { config, setField } = useWorkbench()
   if (field.type === 'tags') return <TagsField field={field} />
+  if (field.type === 'pairs') return <PairsField field={field} />
 
   if (field.type === 'select') {
     const value = config[field.key] as string

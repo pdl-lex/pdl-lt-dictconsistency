@@ -205,6 +205,25 @@ def clear_session(session_id: str) -> None:
     shutil.rmtree(path, ignore_errors=True)
 
 
+def read_file_content(base: Path, subdir: str, filename: str) -> str:
+    """Rohinhalt einer geprüften Datei lesen (für die Fundstellen-Vorschau).
+
+    `subdir`/`filename` kommen aus einer Ergebniszeile, sind also grundsätzlich
+    vertrauenswürdig — die Auflösung wird trotzdem gegen `base` abgesichert
+    (gleiches Muster wie `extract_zip`/`materialize_db_selection`), falls sie
+    z. B. über die API direkt manipuliert werden.
+    """
+    from .source import XmlFileRef
+
+    base_resolved = base.resolve()
+    target = XmlFileRef(subdir=subdir or ".", filename=filename).resolve(base).resolve()
+    if not target.is_relative_to(base_resolved):
+        raise PermissionError(f"Pfad außerhalb des Basisverzeichnisses: {filename}")
+    if not target.is_file():
+        raise FileNotFoundError(filename)
+    return target.read_text(encoding="utf-8", errors="replace")
+
+
 # ── wbdb-Artikel ────────────────────────────────────────────────────────────
 
 # \x01: ein Steuerzeichen, das in resource_id/source_path nicht vorkommen kann

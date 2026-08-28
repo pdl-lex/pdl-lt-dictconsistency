@@ -1,8 +1,10 @@
 // Modul-Registry: eine deklarative Beschreibung jeder Prüfung steuert
 // Navigation, Konfigurator-Pane und Ergebnis-Tabelle generisch.
-import { api, type CheckResult, type ValidatorResponse } from '../api/client'
+import { api, pollJob, type CheckResult, type ValidatorResponse } from '../api/client'
 
-export type FieldType = 'text' | 'select' | 'checkbox' | 'tags'
+export type FieldType = 'text' | 'select' | 'checkbox' | 'tags' | 'pairs'
+
+export interface TagAttrPair { tag: string; attribute: string }
 
 export interface Field {
   type: FieldType
@@ -11,9 +13,11 @@ export interface Field {
   placeholder?: string
   mono?: boolean
   options?: string[]
-  /** Endpunkt, der Tag-Vorschläge liefert (für type: 'tags'). */
+  /** Endpunkt, der Tag-Vorschläge liefert (für type: 'tags' | 'pairs'). */
   loadTagsPath?: string
-  default: string | boolean | string[]
+  /** Endpunkt, der Attribut-Vorschläge für ein Tag liefert (für type: 'pairs'). */
+  loadAttrsPath?: string
+  default: string | boolean | string[] | TagAttrPair[]
 }
 
 export interface Column {
@@ -29,6 +33,8 @@ export interface Column {
   diffWith?: string
 }
 
+export interface JobProgress { phase: string; done: number; total: number }
+
 export interface ModuleDef {
   id: string
   label: string
@@ -39,10 +45,15 @@ export interface ModuleDef {
   description: string
   fields: Field[]
   columns: Column[]
-  run: (directory: string, config: Config) => Promise<CheckResult>
+  /** Entweder `run` (einzelne Anfrage) oder `runJob` (Start + Poll, siehe unten) angeben. */
+  run?: (directory: string, config: Config) => Promise<CheckResult>
+  /** Job-basierte Ausführung (Start + Poll) statt einer einzelnen Anfrage —
+   *  für Prüfungen, die zu lange dauern für `run`. Hat Vorrang vor `run`,
+   *  wenn gesetzt (siehe `workbench.tsx`). */
+  runJob?: (directory: string, config: Config, onProgress: (p: JobProgress) => void) => Promise<CheckResult>
 }
 
-export type Config = Record<string, string | boolean | string[]>
+export type Config = Record<string, string | boolean | string[] | TagAttrPair[]>
 
 const COMMON_TAIL: Column[] = [
   { key: 'quelle', label: 'Gedruckte Ausgabe', width: 150, mono: true },
@@ -129,6 +140,39 @@ export const MODULES: ModuleDef[] = [
     }),
   },
   {
+    id: 'references', label: 'Verweise', group: 'XML',
+    eyebrow: 'XML', title: 'Verweise',
+    description: 'Prüft Verweise (BDO-Artikelreferenzen gegen die Datenbank und/oder http(s)-Links) auf Erreichbarkeit ihres Ziels.',
+    fields: [
+      { type: 'pairs', key: 'sources', label: 'Verweisquellen (Tag + Attribut)',
+        loadTagsPath: '/checks/tag-content/tags', loadAttrsPath: '/checks/tag-content/attrs',
+        default: [{ tag: 'verweis', attribute: 'ziel' }] },
+      { type: 'checkbox', key: 'check_http_links', label: 'Zusätzlich alle http(s)-Links prüfen (Attribute und Text)', default: false },
+      { type: 'checkbox', key: 'include_fehlt_marked', label: 'Bereits als fehlend markierte Verweise (@fehlt="ja") mitprüfen', default: true },
+    ],
+    columns: [...HEAD, { key: 'tag', label: 'Tag', width: 110, chip: true },
+      { key: 'attribute', label: 'Attribut', width: 110 },
+      { key: 'kind', label: 'Art', width: 80, chip: true },
+      { key: 'target', label: 'Ziel', mono: true },
+      { key: 'status', label: 'Status', danger: true },
+      { key: 'fehlt_marked', label: 'bereits markiert', width: 130 },
+      ...COMMON_TAIL],
+    runJob: async (directory, c, onProgress) => {
+      const sources = (c.sources as TagAttrPair[]) ?? []
+      const start = await api.post<{ job_id: string; total: number }>('/checks/references/run', {
+        directory, sources,
+        check_http_links: c.check_http_links, include_fehlt_marked: c.include_fehlt_marked,
+      })
+      const r = await pollJob<CheckResult>(`/checks/references/run/${start.job_id}`, onProgress)
+      const results = r.results.map((row) => ({
+        ...row,
+        kind: row.kind === 'link' ? 'Link' : 'Artikel',
+        fehlt_marked: row.fehlt_marked ? 'ja' : '',
+      }))
+      return { ...r, results }
+    },
+  },
+  {
     id: 'stats', label: 'Anzahl und Länge', group: 'Stil und Schreibung',
     eyebrow: 'Stil und Schreibung', title: 'Anzahl und Länge',
     description: 'Wertet pro Datei Anzahl und Textlänge (min/max/Ø) eines Tags aus.',
@@ -170,7 +214,7 @@ export function moduleById(id: string): ModuleDef | undefined {
 
 export function defaultConfig(m: ModuleDef): Config {
   const c: Config = {}
-  for (const f of m.fields) c[f.key] = Array.isArray(f.default) ? [...f.default] : f.default
+  for (const f of m.fields) c[f.key] = Array.isArray(f.default) ? ([...f.default] as string[] | TagAttrPair[]) : f.default
   return c
 }
 
@@ -181,4 +225,10 @@ export async function loadTags(path: string, directory: string): Promise<string[
   const r = await api.post<{ tags: string[]; default_excluded?: string[] }>(path, { directory })
   const excluded = new Set(r.default_excluded ?? [])
   return r.tags.filter((t) => !excluded.has(t))
+}
+
+/** Attribut-Vorschläge für ein Tag laden (für type: 'pairs', z. B. Verweisquellen). */
+export async function loadAttrs(path: string, directory: string, tag: string): Promise<string[]> {
+  const r = await api.post<{ attrs: string[] }>(path, { directory, tags_filter: tag ? [tag] : [] })
+  return r.attrs
 }

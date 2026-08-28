@@ -1,11 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgGridReact } from 'ag-grid-react'
-import type { CellStyle, ColDef, ICellRendererParams } from 'ag-grid-community'
+import type { CellStyle, ColDef, ICellRendererParams, SelectionChangedEvent } from 'ag-grid-community'
 import { ltGridTheme } from '../design/agGrid'
 import { Icon } from '../design/icons'
 import { Diff, HBar, Kbd, kc, Sparkbars, type SparkDatum } from '../design/widgets'
 import type { Column } from '../modules/registry'
 import { useWorkbench } from '../state/workbench'
+import { FilePreviewDialog, type FilePreviewTarget } from './FilePreviewDialog'
 
 export function str(v: unknown): string { return v == null ? '' : String(v) }
 
@@ -90,12 +91,21 @@ function buildColumnDefs(columns: Column[]): ColDef[] {
   })
 }
 
+export const PHASE_LABELS: Record<string, string> = {
+  scanning: 'Verweise werden gezählt',
+  checking: 'Ziele werden geprüft',
+}
+
 export function ResultsPane() {
-  const { module, result, running, error, directory } = useWorkbench()
+  const { module, result, running, error, directory, progress } = useWorkbench()
   const columns = module.columns
   const [query, setQuery] = useState('')
   const [displayedCount, setDisplayedCount] = useState(0)
+  const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null)
+  const [preview, setPreview] = useState<FilePreviewTarget | null>(null)
   const gridRef = useRef<AgGridReact>(null)
+
+  const supportsPreview = columns.some((c) => c.key === 'line')
 
   const rows = result?.results ?? []
   const filtered = useMemo(() => {
@@ -109,6 +119,11 @@ export function ResultsPane() {
   const onGridStateChange = useCallback(() => {
     setDisplayedCount(gridRef.current?.api?.getDisplayedRowCount() ?? 0)
   }, [])
+  const onSelectionChanged = useCallback((e: SelectionChangedEvent) => {
+    setSelectedRow(e.api.getSelectedRows()[0] ?? null)
+  }, [])
+
+  useEffect(() => { setSelectedRow(null) }, [result])
 
   const hasTag = columns.some((c) => c.key === 'tag')
   const byTag = hasTag ? aggregate(rows, 'tag') : []
@@ -116,6 +131,16 @@ export function ResultsPane() {
 
   const download = () => {
     gridRef.current?.api.exportDataAsCsv({ columnSeparator: ';', fileName: `${module.id}_results.csv` })
+  }
+
+  const openFile = () => {
+    if (!selectedRow || !directory) return
+    setPreview({
+      directory,
+      subdir: str(selectedRow.subdir),
+      filename: str(selectedRow.filename),
+      line: Number(selectedRow.line) || 0,
+    })
   }
 
   return (
@@ -165,7 +190,16 @@ export function ResultsPane() {
         {error ? (
           <div style={{ padding: '20px 16px', color: 'var(--lt-err)', fontSize: 13 }}>{error}</div>
         ) : running ? (
-          <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--lt-fg-3)', fontSize: 13 }}>Prüfung läuft…</div>
+          <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--lt-fg-3)', fontSize: 13 }}>
+            {progress ? (
+              <div style={{ maxWidth: 320, margin: '0 auto' }}>
+                <div style={{ marginBottom: 8 }}>
+                  {PHASE_LABELS[progress.phase] ?? progress.phase}… ({progress.done} von {progress.total || '?'})
+                </div>
+                <HBar value={progress.done} max={Math.max(progress.total, 1)} height={6} />
+              </div>
+            ) : 'Prüfung läuft…'}
+          </div>
         ) : !result ? (
           <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--lt-fg-3)', fontSize: 13 }}>
             {directory ? 'Bereit. „Prüfen" startet die Analyse.' : 'Datenverzeichnis angeben und „Prüfen".'}
@@ -182,6 +216,8 @@ export function ResultsPane() {
             overlayNoRowsTemplate="Keine Treffer."
             onGridReady={onGridStateChange}
             onModelUpdated={onGridStateChange}
+            rowSelection={supportsPreview ? { mode: 'singleRow', checkboxes: false, enableClickSelection: true } : undefined}
+            onSelectionChanged={supportsPreview ? onSelectionChanged : undefined}
           />
         )}
       </div>
@@ -196,11 +232,24 @@ export function ResultsPane() {
           border: '1px solid var(--lt-primary)', height: 36, padding: '0 14px', borderRadius: 'var(--lt-r-md)',
           fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: !result || filtered.length === 0 ? 0.5 : 1,
         }}><Icon name="download" size={13} /> CSV herunterladen</button>
+        {supportsPreview && <>
+          <button onClick={openFile} disabled={!selectedRow} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 7, background: 'var(--lt-bg-0)', color: 'var(--lt-fg-2)',
+            border: '1px solid var(--lt-line-2)', height: 36, padding: '0 14px', borderRadius: 'var(--lt-r-md)',
+            fontSize: 13, fontWeight: 600, cursor: selectedRow ? 'pointer' : 'not-allowed',
+            opacity: selectedRow ? 1 : 0.5,
+          }}><Icon name="file" size={13} /> Datei öffnen</button>
+          <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--lt-fg-3)' }}>
+            Zeile auswählen, dann 'Datei öffnen' klicken.
+          </span>
+        </>}
         <span style={{ flex: 1 }} />
         <span style={{ fontFamily: 'var(--lt-font-mono)', color: 'var(--lt-fg-3)' }}>
           {displayedCount} von {filtered.length}
         </span>
       </div>
+
+      {preview && <FilePreviewDialog target={preview} onClose={() => setPreview(null)} />}
     </main>
   )
 }

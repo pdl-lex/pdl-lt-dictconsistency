@@ -25,11 +25,20 @@ export function buildMenu(isAdmin: boolean): MenuGroup[] {
   const extraItems: Record<string, MenuItem[]> = {
     XML: [{ id: 'structure', label: 'Strukturanalyse' }],
   }
-  return order.map((group) => ({
-    group, icon: RAIL_ICON[group],
-    items: staticItems[group]
-      ?? [...MODULES.filter((m) => m.group === group).map((m) => ({ id: m.id, label: m.label })), ...(extraItems[group] ?? [])],
-  }))
+  // "Verweise" soll der allerletzte Eintrag unter XML sein, auch nach der
+  // Strukturanalyse-Sonderseite — deshalb aus der normalen MODULES-Reihenfolge
+  // herausgezogen und ans Ende gehängt, statt vor extraItems zu landen.
+  const trailingItems: Record<string, string[]> = { XML: ['references'] }
+  return order.map((group) => {
+    const trailingIds = new Set(trailingItems[group] ?? [])
+    const groupModules = MODULES.filter((m) => m.group === group).map((m) => ({ id: m.id, label: m.label }))
+    const items = staticItems[group] ?? [
+      ...groupModules.filter((m) => !trailingIds.has(m.id)),
+      ...(extraItems[group] ?? []),
+      ...groupModules.filter((m) => trailingIds.has(m.id)),
+    ]
+    return { group, icon: RAIL_ICON[group], items }
+  })
 }
 
 function railRow(active: boolean): CSSProperties {

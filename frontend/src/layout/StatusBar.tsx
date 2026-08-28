@@ -25,9 +25,6 @@ export function StatusBar() {
       <Item dot="var(--lt-warn)" k="LLM:" v="nicht konfiguriert" />
       <Item k="Letzter Lauf:" v={lastRunMs != null ? `${(lastRunMs / 1000).toFixed(2)} s` : '–'} />
       <span style={{ flex: 1 }} />
-      <Item v="UTF-8" />
-      <Item v="TL0" />
-      <Item v="DE" />
       <span style={{ padding: '0 12px', color: 'var(--lt-fg-4)' }}>
         <Kbd>{kc('K')}</Kbd> Befehle
       </span>

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { CheckResult } from '../api/client'
 import { ApiError } from '../api/client'
-import { MODULES, defaultConfig, moduleById, type Config, type ModuleDef } from '../modules/registry'
+import { MODULES, defaultConfig, moduleById, type Config, type JobProgress, type ModuleDef, type TagAttrPair } from '../modules/registry'
 
 export type LayoutMode = 'left' | 'right' | 'bottom'
 
@@ -26,11 +26,12 @@ interface WorkbenchState {
   loginDialogOpen: boolean
   setLoginDialogOpen: (v: boolean) => void
   config: Config
-  setField: (key: string, value: string | boolean | string[]) => void
+  setField: (key: string, value: string | boolean | string[] | TagAttrPair[]) => void
   result: CheckResult | null
   running: boolean
   error: string
   lastRunMs: number | null
+  progress: JobProgress | null
   run: () => Promise<void>
 }
 
@@ -50,6 +51,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [lastRunMs, setLastRunMs] = useState<number | null>(null)
+  const [progress, setProgress] = useState<JobProgress | null>(null)
 
   const module = moduleById(activeId) ?? MODULES[0]
   const config = configs[activeId] ?? defaultConfig(module)
@@ -60,7 +62,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { localStorage.setItem('lt.directory', directory) }, [directory])
 
-  const setField = useCallback((key: string, value: string | boolean | string[]) => {
+  const setField = useCallback((key: string, value: string | boolean | string[] | TagAttrPair[]) => {
     setConfigs((prev) => {
       const base = prev[activeId] ?? defaultConfig(module)
       return { ...prev, [activeId]: { ...base, [key]: value } }
@@ -71,6 +73,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     setActiveId(id)
     setResult(null)
     setError('')
+    setProgress(null)
   }, [])
 
   const applyDataset = useCallback((dir: string, count: number) => {
@@ -82,9 +85,11 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
 
   const run = useCallback(async () => {
     if (!directory.trim()) { setError('Bitte zuerst ein Datenverzeichnis angeben.'); return }
-    setRunning(true); setError('')
+    setRunning(true); setError(''); setProgress(null)
     try {
-      const res = await module.run(directory, config)
+      const res = module.runJob
+        ? await module.runJob(directory, config, setProgress)
+        : await module.run!(directory, config)
       setResult(res)
       setLastRunMs(res.duration_ms)
     } catch (e) {
@@ -92,6 +97,7 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
       setResult(null)
     } finally {
       setRunning(false)
+      setProgress(null)
     }
   }, [directory, module, config])
 
@@ -102,8 +108,8 @@ export function WorkbenchProvider({ children }: { children: ReactNode }) {
     directory, setDirectory, fileCount, applyDataset, dataDialogOpen, setDataDialogOpen,
     loginDialogOpen, setLoginDialogOpen,
     config, setField,
-    result, running, error, lastRunMs, run,
-  }), [theme, layout, railPinned, activeId, changeModule, module, directory, fileCount, applyDataset, dataDialogOpen, loginDialogOpen, config, setField, result, running, error, lastRunMs, run])
+    result, running, error, lastRunMs, progress, run,
+  }), [theme, layout, railPinned, activeId, changeModule, module, directory, fileCount, applyDataset, dataDialogOpen, loginDialogOpen, config, setField, result, running, error, lastRunMs, progress, run])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

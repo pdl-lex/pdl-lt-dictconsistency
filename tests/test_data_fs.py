@@ -143,6 +143,39 @@ def test_wbdb_index_status_before_any_build(admin_client):
     assert body["status"] is None
 
 
+def test_file_content_returns_raw_text(logged_in_client, sample_xml_dir):
+    resp = logged_in_client.get(
+        "/api/data/file-content",
+        params={"directory": str(sample_xml_dir), "subdir": ".", "filename": "gut.xml"},
+    )
+    assert resp.status_code == 200
+    assert "Katze" in resp.json()["content"]
+
+
+def test_file_content_missing_file_404(logged_in_client, sample_xml_dir):
+    resp = logged_in_client.get(
+        "/api/data/file-content",
+        params={"directory": str(sample_xml_dir), "subdir": ".", "filename": "nirgendwo.xml"},
+    )
+    assert resp.status_code == 404
+
+
+def test_file_content_blocks_path_escape(logged_in_client, sample_xml_dir):
+    resp = logged_in_client.get(
+        "/api/data/file-content",
+        params={"directory": str(sample_xml_dir), "subdir": "..", "filename": "geheim.txt"},
+    )
+    assert resp.status_code in (403, 404)
+
+
+def test_file_content_requires_login(client, sample_xml_dir):
+    resp = client.get(
+        "/api/data/file-content",
+        params={"directory": str(sample_xml_dir), "subdir": ".", "filename": "gut.xml"},
+    )
+    assert resp.status_code == 401
+
+
 def test_validator_check_end_to_end(logged_in_client, sample_xml_dir):
     resp = logged_in_client.post(
         "/api/checks/validator",

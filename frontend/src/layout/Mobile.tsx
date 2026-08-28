@@ -5,7 +5,7 @@
 // (Navigation + Layout-Reihenfolge + Dunkler Modus).
 import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { Icon, Logo, type IconName } from '../design/icons'
-import { Diff, Sparkbars, type SparkDatum } from '../design/widgets'
+import { Diff, HBar, Sparkbars, type SparkDatum } from '../design/widgets'
 import { ApiInfoConfig, ApiInfoMain } from '../modules/apiInfo'
 import { IntroConfig, IntroMain } from '../modules/intro'
 import { StructureConfig, StructureMain, useStructure } from '../modules/structure'
@@ -15,7 +15,7 @@ import { useAuth } from '../state/auth'
 import { useWorkbench } from '../state/workbench'
 import { DataCard, FieldRenderer } from './ConfigPane'
 import { buildMenu } from './Rail'
-import { aggregate, str, toCsv } from './ResultsPane'
+import { aggregate, PHASE_LABELS, str, toCsv } from './ResultsPane'
 
 const CARD_PAGE = 30
 
@@ -314,7 +314,7 @@ function ResultCard({ row, columns }: { row: Record<string, unknown>; columns: C
 // ── Ergebnisse (Kopf + Statistik + Kartenliste) ─────────────────────────────
 
 function MobileResults() {
-  const { module, result, running, error, directory } = useWorkbench()
+  const { module, result, running, error, directory, progress } = useWorkbench()
   const [query, setQuery] = useState('')
   const [filterOpen, setFilterOpen] = useState(false)
   const [shown, setShown] = useState(CARD_PAGE)
@@ -394,7 +394,16 @@ function MobileResults() {
         {error ? (
           <div style={{ padding: '24px 16px', color: 'var(--lt-err)', fontSize: 13 }}>{error}</div>
         ) : running ? (
-          <div style={{ padding: '30px 16px', textAlign: 'center', color: 'var(--lt-fg-3)', fontSize: 13 }}>Prüfung läuft…</div>
+          <div style={{ padding: '30px 16px', textAlign: 'center', color: 'var(--lt-fg-3)', fontSize: 13 }}>
+            {progress ? (
+              <div style={{ maxWidth: 280, margin: '0 auto' }}>
+                <div style={{ marginBottom: 8 }}>
+                  {PHASE_LABELS[progress.phase] ?? progress.phase}… ({progress.done} von {progress.total || '?'})
+                </div>
+                <HBar value={progress.done} max={Math.max(progress.total, 1)} height={6} />
+              </div>
+            ) : 'Prüfung läuft…'}
+          </div>
         ) : !result ? (
           <div style={{ padding: '30px 16px', textAlign: 'center', color: 'var(--lt-fg-3)', fontSize: 13 }}>
             {directory ? 'Bereit. „Prüfen" startet die Analyse.' : 'Datenverzeichnis angeben und „Prüfen".'}

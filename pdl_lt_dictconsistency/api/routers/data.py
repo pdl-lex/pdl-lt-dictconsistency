@@ -36,6 +36,10 @@ class Datasource(BaseModel):
     exists: bool
 
 
+class FileContentResponse(BaseModel):
+    content: str
+
+
 @router.get("/datasources", response_model=list[Datasource])
 def datasources() -> list[Datasource]:
     """Vorkonfigurierte Datenquellen aus datasources.json."""
@@ -87,3 +91,18 @@ def delete_session(session_id: str) -> dict:
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
     return {"status": "deleted"}
+
+
+@router.get("/file-content", response_model=FileContentResponse)
+def file_content(directory: str, subdir: str, filename: str) -> FileContentResponse:
+    """Rohinhalt einer geprüften Datei für die Fundstellen-Vorschau (Ergebnistabelle
+    „Datei öffnen"). `directory` unterliegt derselben LT_DATA_ROOTS-Prüfung wie
+    /data/scan und die Prüf-Endpunkte."""
+    base = resolve_directory(directory)
+    try:
+        content = data.read_file_content(base, subdir, filename)
+    except PermissionError as e:
+        raise HTTPException(403, str(e)) from e
+    except FileNotFoundError as e:
+        raise HTTPException(404, f"Datei nicht gefunden: {e}") from e
+    return FileContentResponse(content=content)

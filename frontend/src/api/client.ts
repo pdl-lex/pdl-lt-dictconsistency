@@ -143,6 +143,36 @@ export const dataApi = {
   dbIndexSearch: (q: string) => api.get<DbSearchHit[]>(`/data/db-index/search?q=${encodeURIComponent(q)}`),
   dbLoadSelection: (selection: DbSelection) => api.post<LoadJobHandle>('/data/db-load', selection),
   dbLoadStatus: (jobId: string) => api.get<LoadJobStatus>(`/data/db-load/${jobId}`),
+  fileContent: (directory: string, subdir: string, filename: string) =>
+    api.get<{ content: string }>(
+      `/data/file-content?directory=${encodeURIComponent(directory)}&subdir=${encodeURIComponent(subdir)}&filename=${encodeURIComponent(filename)}`
+    ),
+}
+
+export interface JobStatus<T> {
+  status: 'running' | 'ok' | 'error'
+  phase: string
+  done: number
+  total: number
+  error: string | null
+  result: T | null
+}
+
+/** Job starten (POST liefert {job_id,...}) und `statusPath` pollen, bis der
+ *  Job fertig ist — Basis für jede job-basierte Prüfung (siehe `registry.ts`
+ *  `runJob`). `onProgress` wird bei jedem Poll aufgerufen. */
+export async function pollJob<T>(
+  statusPath: string,
+  onProgress: (p: { phase: string; done: number; total: number }) => void,
+  intervalMs = 800,
+): Promise<T> {
+  for (;;) {
+    const s = await api.get<JobStatus<T>>(statusPath)
+    onProgress({ phase: s.phase, done: s.done, total: s.total })
+    if (s.status === 'ok') return s.result as T
+    if (s.status === 'error') throw new ApiError(500, s.error ?? 'Prüfung fehlgeschlagen.')
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
 }
 
 export interface ValidatorResponse {
