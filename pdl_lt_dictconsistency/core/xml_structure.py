@@ -17,8 +17,6 @@ from lxml import etree
 from .common import DEFAULT_CHUNK_SIZE, Progress
 from .source import XmlFileRef, make_parser
 
-MAX_TEXT_EXAMPLES = 5
-MAX_ATTR_EXAMPLES = 20
 MAX_TEXT_LEN = 120
 
 
@@ -89,10 +87,9 @@ def _traverse(elem, analysis: dict, parent_path: tuple) -> None:
     text = (elem.text or "").strip()
     if text:
         node["has_text"] = True
-        if len(node["text_examples"]) < MAX_TEXT_EXAMPLES:
-            truncated = text[:MAX_TEXT_LEN]
-            if truncated not in node["text_examples"]:
-                node["text_examples"].append(truncated)
+        truncated = text[:MAX_TEXT_LEN]
+        if truncated not in node["text_examples"]:
+            node["text_examples"].append(truncated)
 
     for attr_qname, attr_val in elem.attrib.items():
         try:
@@ -101,7 +98,7 @@ def _traverse(elem, analysis: dict, parent_path: tuple) -> None:
             attr_local = str(attr_qname)
 
         values = node["attrs"].setdefault(attr_local, [])
-        if len(values) < MAX_ATTR_EXAMPLES and attr_val not in values:
+        if attr_val not in values:
             values.append(attr_val)
 
     for child in elem:

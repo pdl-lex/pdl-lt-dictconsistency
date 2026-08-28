@@ -272,8 +272,9 @@ function AttrValues({ row, onShowAll }: { row: StructureRow; onShowAll: (label: 
   )
 }
 
-function TextExample({ row, shownIndex, onReveal }: {
+function TextExample({ row, shownIndex, onReveal, onShowAll }: {
   row: StructureRow; shownIndex: number | undefined; onReveal: (row: StructureRow) => void
+  onShowAll: (label: string, values: string[]) => void
 }) {
   const examples = row.text_examples ?? []
   return (
@@ -295,6 +296,9 @@ function TextExample({ row, shownIndex, onReveal }: {
             </button>
           )}
         </>
+      )}
+      {examples.length > 1 && (
+        <button style={chipBtn} onClick={() => onShowAll(row.label, examples)}>alle ({examples.length})</button>
       )}
     </span>
   )
@@ -325,12 +329,12 @@ function TreeRow({ row, isMatch, isCollapsed, shownIndex, onToggle, onReveal, on
         fontWeight: isTag ? 600 : 400,
       }}>{row.label}</span>
       {row.kind === 'attr' && <AttrValues row={row} onShowAll={onShowAll} />}
-      {row.kind === 'text_content' && <TextExample row={row} shownIndex={shownIndex} onReveal={onReveal} />}
+      {row.kind === 'text_content' && <TextExample row={row} shownIndex={shownIndex} onReveal={onReveal} onShowAll={onShowAll} />}
     </div>
   )
 }
 
-function AttrModal({ label, values, onClose }: { label: string; values: string[]; onClose: () => void }) {
+function ValuesModal({ label, values, onClose }: { label: string; values: string[]; onClose: () => void }) {
   return (
     <div onClick={onClose} style={{
       position: 'absolute', inset: 0, zIndex: 200, background: 'rgba(8,12,10,0.42)', backdropFilter: 'blur(1.5px)',
@@ -446,7 +450,7 @@ export function StructureMain() {
         )}
       </div>
 
-      {modal && <AttrModal label={modal.label} values={modal.values} onClose={() => setModal(null)} />}
+      {modal && <ValuesModal label={modal.label} values={modal.values} onClose={() => setModal(null)} />}
     </main>
   )
 }
