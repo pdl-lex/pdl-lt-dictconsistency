@@ -21,6 +21,7 @@ from .routers import (
     data,
     db_index,
     nesting,
+    numbering,
     pathfinder,
     references,
     senses_stats,
@@ -63,7 +64,7 @@ def health() -> dict:
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
-for module in (data, db_index, uniqueness, nesting, pathfinder, senses_stats, validator, tag_content, spelling, xml_structure, references):
+for module in (data, db_index, uniqueness, nesting, numbering, pathfinder, senses_stats, validator, tag_content, spelling, xml_structure, references):
     app.include_router(module.router, prefix="/api")
 
 

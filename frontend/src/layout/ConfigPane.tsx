@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { api } from '../api/client'
 import { Icon } from '../design/icons'
 import { kc, Segmented } from '../design/widgets'
-import { loadAttrs, loadTags, type Field, type SpellingPair, type TagAttrPair } from '../modules/registry'
+import {
+  loadAttrs, loadTags, NUMBERING_EMPTY_RULES, NUMBERING_FORMATS, NUMBERING_TEMPLATES,
+  type Field, type NumberingLevel, type NumberingScheme, type SpellingPair, type TagAttrPair,
+} from '../modules/registry'
 import { useWorkbench, type LayoutMode } from '../state/workbench'
 
 const inputStyle: CSSProperties = {
@@ -334,11 +337,79 @@ function WordlistField({ field }: { field: Field }) {
   )
 }
 
+function NumberingSchemeField({ field }: { field: Field }) {
+  const { config, setField } = useWorkbench()
+  const value = config[field.key] as NumberingScheme
+  const { levels, max_depth: maxDepth } = value
+
+  const applyTemplate = (name: string) => {
+    const tpl = NUMBERING_TEMPLATES[name]
+    setField(field.key, { max_depth: tpl.max_depth, levels: tpl.levels.map((l) => ({ ...l })) } as NumberingScheme)
+  }
+  const updateLevel = (i: number, patch: Partial<NumberingLevel>) =>
+    setField(field.key, { ...value, levels: levels.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) })
+  const setMaxDepth = (n: number) => setField(field.key, { ...value, max_depth: n })
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, flex: 1 }}>{field.label}</span>
+      </div>
+      <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--lt-fg-2)', marginBottom: 4 }}>Vorlage</div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        {Object.keys(NUMBERING_TEMPLATES).map((name) => (
+          <button key={name} onClick={() => applyTemplate(name)} style={btnGhost}>{name}</button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <label style={{ fontSize: 11, color: 'var(--lt-fg-2)', flex: 1 }}>Maximale Tiefe</label>
+        <select value={maxDepth} onChange={(e) => setMaxDepth(Number(e.target.value))} style={{ ...inputStyle, width: 60 }}>
+          {levels.map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+        </select>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '3px 6px 6px 0', color: 'var(--lt-fg-3)', fontWeight: 600 }}>Ebene</th>
+            <th style={{ textAlign: 'left', padding: '3px 6px 6px', color: 'var(--lt-fg-3)', fontWeight: 600 }}>Format</th>
+            <th style={{ textAlign: 'left', padding: '3px 0 6px 6px', color: 'var(--lt-fg-3)', fontWeight: 600 }}>Nummer optional</th>
+          </tr>
+        </thead>
+        <tbody>
+          {levels.map((level, i) => {
+            const active = i < maxDepth
+            return (
+              <tr key={i} style={{ opacity: active ? 1 : 0.4 }}>
+                <td style={{ padding: '3px 6px 3px 0' }}>{i + 1}</td>
+                <td style={{ padding: '3px 6px' }}>
+                  <select disabled={!active} value={level.format}
+                    onChange={(e) => updateLevel(i, { format: e.target.value as NumberingLevel['format'] })}
+                    style={inputStyle}>
+                    {NUMBERING_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </td>
+                <td style={{ padding: '3px 0 3px 6px' }}>
+                  <select disabled={!active} value={level.empty_rule}
+                    onChange={(e) => updateLevel(i, { empty_rule: e.target.value as NumberingLevel['empty_rule'] })}
+                    style={inputStyle}>
+                    {NUMBERING_EMPTY_RULES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                  </select>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 export function FieldRenderer({ field }: { field: Field }) {
   const { config, setField } = useWorkbench()
   if (field.type === 'tags') return <TagsField field={field} />
   if (field.type === 'pairs') return <PairsField field={field} />
   if (field.type === 'wordlist') return <WordlistField field={field} />
+  if (field.type === 'numbering-scheme') return <NumberingSchemeField field={field} />
 
   if (field.type === 'select') {
     const value = config[field.key] as string

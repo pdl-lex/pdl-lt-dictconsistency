@@ -2,10 +2,67 @@
 // Navigation, Konfigurator-Pane und Ergebnis-Tabelle generisch.
 import { api, pollJob, type CheckResult, type ValidatorResponse } from '../api/client'
 
-export type FieldType = 'text' | 'select' | 'checkbox' | 'tags' | 'pairs' | 'wordlist'
+export type FieldType = 'text' | 'select' | 'checkbox' | 'tags' | 'pairs' | 'wordlist' | 'numbering-scheme'
 
 export interface TagAttrPair { tag: string; attribute: string }
 export interface SpellingPair { alt: string; neu: string }
+
+export type NumberingFormat = 'arabisch' | 'kleinbuchstabe' | 'grossbuchstabe' | 'griechisch' | 'roemisch_gross' | 'roemisch_klein'
+export type NumberingEmptyRule = 'pflicht' | 'einzelbedeutung' | 'immer'
+export interface NumberingLevel { format: NumberingFormat; empty_rule: NumberingEmptyRule }
+export interface NumberingScheme { levels: NumberingLevel[]; max_depth: number }
+
+export const NUMBERING_FORMATS: { value: NumberingFormat; label: string }[] = [
+  { value: 'arabisch', label: 'Arabisch (1, 2, 3, …)' },
+  { value: 'kleinbuchstabe', label: 'Kleinbuchstabe (a, b, c, …)' },
+  { value: 'grossbuchstabe', label: 'Großbuchstabe (A, B, C, …)' },
+  { value: 'griechisch', label: 'Griechisch, klein (α, β, γ, …)' },
+  { value: 'roemisch_gross', label: 'Römisch, groß (I, II, III, …)' },
+  { value: 'roemisch_klein', label: 'Römisch, klein (i, ii, iii, …)' },
+]
+
+export const NUMBERING_EMPTY_RULES: { value: NumberingEmptyRule; label: string }[] = [
+  { value: 'pflicht', label: 'Pflicht' },
+  { value: 'einzelbedeutung', label: 'Optional bei Einzelbedeutung (keine Geschwister)' },
+  { value: 'immer', label: 'Immer optional' },
+]
+
+/** Vorlagen fürs Nummerierungsschema — Ausgangspunkt, danach frei editierbar.
+ *  „BWB/DIBS-Schema" ist an echten bdo-Daten verifiziert (bwb/dibs: arabisch →
+ *  Kleinbuchstabe → griech. Kleinbuchstabe → kleines Römisch; Einzelbedeutungen
+ *  bleiben dort typischerweise unnummeriert). */
+export const NUMBERING_TEMPLATES: Record<string, NumberingScheme> = {
+  'Immer arabisch': {
+    levels: [
+      { format: 'arabisch', empty_rule: 'einzelbedeutung' },
+      { format: 'arabisch', empty_rule: 'pflicht' },
+      { format: 'arabisch', empty_rule: 'pflicht' },
+      { format: 'arabisch', empty_rule: 'pflicht' },
+      { format: 'arabisch', empty_rule: 'pflicht' },
+    ],
+    max_depth: 3,
+  },
+  'BWB/DIBS-Schema': {
+    levels: [
+      { format: 'arabisch', empty_rule: 'einzelbedeutung' },
+      { format: 'kleinbuchstabe', empty_rule: 'immer' },
+      { format: 'griechisch', empty_rule: 'immer' },
+      { format: 'roemisch_klein', empty_rule: 'immer' },
+      { format: 'arabisch', empty_rule: 'immer' },
+    ],
+    max_depth: 5,
+  },
+  'Nur eine Ebene': {
+    levels: [
+      { format: 'arabisch', empty_rule: 'pflicht' },
+      { format: 'arabisch', empty_rule: 'pflicht' },
+      { format: 'arabisch', empty_rule: 'pflicht' },
+      { format: 'arabisch', empty_rule: 'pflicht' },
+      { format: 'arabisch', empty_rule: 'pflicht' },
+    ],
+    max_depth: 1,
+  },
+}
 
 export interface Field {
   type: FieldType
@@ -18,7 +75,7 @@ export interface Field {
   loadTagsPath?: string
   /** Endpunkt, der Attribut-Vorschläge für ein Tag liefert (für type: 'pairs'). */
   loadAttrsPath?: string
-  default: string | boolean | string[] | TagAttrPair[] | SpellingPair[]
+  default: string | boolean | string[] | TagAttrPair[] | SpellingPair[] | NumberingScheme
 }
 
 export interface Column {
@@ -54,7 +111,7 @@ export interface ModuleDef {
   runJob?: (directory: string, config: Config, onProgress: (p: JobProgress) => void) => Promise<CheckResult>
 }
 
-export type Config = Record<string, string | boolean | string[] | TagAttrPair[] | SpellingPair[]>
+export type Config = Record<string, string | boolean | string[] | TagAttrPair[] | SpellingPair[] | NumberingScheme>
 
 const COMMON_TAIL: Column[] = [
   { key: 'quelle', label: 'Gedruckte Ausgabe', width: 150, mono: true },
@@ -174,6 +231,28 @@ export const MODULES: ModuleDef[] = [
     },
   },
   {
+    id: 'numbering', label: 'Bedeutungsnummerierung', group: 'XML',
+    eyebrow: 'XML', title: 'Bedeutungsnummerierung',
+    description: 'Prüft die Nummerierung von Bedeutungen: Format, Reihenfolge und erlaubte Tiefe je Ebene.',
+    fields: [
+      { type: 'text', key: 'tag_name', label: 'Tag-Name', placeholder: 'z. B. bedeutung-position', mono: true, default: 'bedeutung-position' },
+      { type: 'text', key: 'attribute_name', label: 'Attribut mit der Nummer', placeholder: 'z. B. nr', mono: true, default: 'nr' },
+      { type: 'numbering-scheme', key: 'scheme', label: 'Nummerierungsschema', default: NUMBERING_TEMPLATES['BWB/DIBS-Schema'] },
+    ],
+    columns: [...HEAD, { key: 'tiefe', label: 'Ebene', width: 64, align: 'right' },
+      { key: 'error_type', label: 'Fehlertyp' },
+      { key: 'gefunden', label: 'Gefunden', mono: true, danger: true },
+      { key: 'erwartet', label: 'Erwartet', mono: true, diffWith: 'gefunden' },
+      ...COMMON_TAIL],
+    run: (directory, c) => {
+      const scheme = c.scheme as NumberingScheme
+      return api.post<CheckResult>('/checks/numbering', {
+        directory, tag_name: c.tag_name, attribute_name: c.attribute_name,
+        levels: scheme.levels, max_depth: scheme.max_depth,
+      })
+    },
+  },
+  {
     id: 'stats', label: 'Anzahl und Länge', group: 'Stil und Schreibung',
     eyebrow: 'Stil und Schreibung', title: 'Anzahl und Länge',
     description: 'Wertet pro Datei Anzahl und Textlänge (min/max/Ø) eines Tags aus.',
@@ -215,10 +294,19 @@ export function moduleById(id: string): ModuleDef | undefined {
   return MODULES.find((m) => m.id === id)
 }
 
+function cloneDefault(value: Field['default']): Field['default'] {
+  if (Array.isArray(value)) return [...value] as string[] | TagAttrPair[] | SpellingPair[]
+  if (typeof value === 'object' && value !== null) {
+    const scheme = value as NumberingScheme
+    return { ...scheme, levels: scheme.levels.map((l) => ({ ...l })) }
+  }
+  return value
+}
+
 export function defaultConfig(m: ModuleDef): Config {
   const c: Config = {}
   for (const f of m.fields) {
-    c[f.key] = Array.isArray(f.default) ? ([...f.default] as string[] | TagAttrPair[] | SpellingPair[]) : f.default
+    c[f.key] = cloneDefault(f.default)
   }
   return c
 }
