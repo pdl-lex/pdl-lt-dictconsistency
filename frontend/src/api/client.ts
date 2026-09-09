@@ -131,7 +131,10 @@ export const dataApi = {
   scan: (directory: string) => api.post<Dataset>('/data/scan', { directory }),
   upload: (files: File[], sessionId?: string) => {
     const form = new FormData()
-    for (const f of files) form.append('files', f)
+    // webkitRelativePath ist gesetzt, wenn die Dateien über einen
+    // Ordner-Picker (webkitdirectory) kamen — dann inkl. Unterordnern
+    // übertragen, damit z. B. Buchstaben-Unterordner erhalten bleiben.
+    for (const f of files) form.append('files', f, f.webkitRelativePath || f.name)
     const q = sessionId ? `?session_id=${encodeURIComponent(sessionId)}` : ''
     return api.upload<Dataset>(`/data/upload${q}`, form)
   },

@@ -142,26 +142,47 @@ def extract_zip(zip_path: Path, extract_to: Path) -> int:
     return xml_count
 
 
+def _safe_relative_path(filename: str) -> Path | None:
+    """Client-Dateiname (ggf. mit Unterordnern aus einem Ordner-Upload, per
+    `webkitRelativePath`) in einen sicheren relativen Pfad wandeln — dasselbe
+    Zip-Slip-Muster wie in `extract_zip`: keine `..`-Segmente, keine absoluten
+    Pfade (führendes `/`/`\\` oder ein Laufwerksbuchstabe). None = unsicher.
+    """
+    normalized = filename.replace("\\", "/")
+    parts = [p for p in normalized.split("/") if p not in ("", ".")]
+    if not parts or ":" in parts[0] or any(p == ".." for p in parts):
+        return None
+    return Path(*parts)
+
+
 def save_upload(dest: Path, filename: str, content: bytes) -> list[str]:
     """Eine hochgeladene Datei (XML oder ZIP) sicher in dest ablegen.
 
+    `filename` kann Unterordner enthalten (Ordner-Upload, siehe
+    `_safe_relative_path`) — die werden unterhalb von dest nachgebildet, damit
+    z. B. Buchstaben-Unterordner wie bei einem ZIP-Upload erhalten bleiben.
     Gibt eine Liste von Fehlermeldungen zurück (leer = ok).
     """
     errors: list[str] = []
-    safe_name = Path(filename).name
-    if not safe_name:
-        return ["Ungültiger Dateiname übersprungen."]
+    rel = _safe_relative_path(filename)
+    if rel is None:
+        return [f"Ungültiger Dateiname übersprungen: {filename}"]
+    safe_name = rel.name
     if len(content) > MAX_FILE_SIZE:
         return [f"Datei {safe_name} zu groß (max {MAX_FILE_SIZE // 1024 // 1024} MB)."]
 
-    file_path = dest / safe_name
+    dest_resolved = dest.resolve()
+    file_path = dest / rel
+    if not file_path.resolve().is_relative_to(dest_resolved):
+        return [f"Ungültiger Pfad übersprungen: {filename}"]
+    file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, "wb") as f:
         f.write(content)
 
     lower = safe_name.lower()
     if lower.endswith(".zip"):
         try:
-            extract_zip(file_path, dest)
+            extract_zip(file_path, file_path.parent)
         except ValueError as e:
             errors.append(str(e))
         finally:

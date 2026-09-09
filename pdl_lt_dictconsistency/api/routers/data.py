@@ -5,13 +5,22 @@ routers/db_index.py und routers/admin.py — hier nur der dateisystembasierte We
 (Server-Pfad, Upload)."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from starlette.datastructures import UploadFile
 
 from ...core import data
 from .._helpers import resolve_directory
 
 router = APIRouter(prefix="/data", tags=["data"])
+
+# Starlettes Multipart-Parser lehnt sonst per Default bei >1000 Datei-Parts
+# bzw. >1MB je Teil mit einer MultiPartException mitten im Body-Stream ab —
+# FastAPI fängt die nicht als 4xx ab, die Verbindung bricht einfach ab (im
+# Browser als "NetworkError when attempting to fetch resource" sichtbar statt
+# einer Fehlermeldung). Ein Ordner-Upload (z. B. ein ganzer Buchstabe mit
+# mehreren tausend Artikeln) braucht großzügigere Limits als den Default.
+MAX_UPLOAD_FILES = 50_000
 
 
 class ScanRequest(BaseModel):
@@ -57,23 +66,39 @@ def scan_directory(req: ScanRequest) -> DatasetResponse:
 
 
 @router.post("/upload", response_model=DatasetResponse)
-async def upload(files: list[UploadFile], session_id: str | None = None) -> DatasetResponse:
+async def upload(request: Request, session_id: str | None = None) -> DatasetResponse:
     """XML-/ZIP-Dateien hochladen. Ohne session_id wird eine neue Session angelegt;
-    mit session_id wird an eine bestehende angehängt."""
-    if not files:
-        raise HTTPException(422, "Keine Dateien übermittelt.")
-    if session_id:
-        try:
-            dest = data.session_path(session_id)
-        except ValueError as e:
-            raise HTTPException(404, str(e)) from e
-    else:
-        session_id, dest = data.new_session()
+    mit session_id wird an eine bestehende angehängt.
 
-    errors: list[str] = []
-    for f in files:
-        content = await f.read()
-        errors.extend(data.save_upload(dest, f.filename or "", content))
+    Nimmt bewusst `Request` statt eines `files: list[UploadFile]`-Parameters
+    entgegen, um Starlettes Multipart-Parser mit angehobenen Limits
+    (`MAX_UPLOAD_FILES`, Teilgröße bis `data.MAX_FILE_SIZE`) aufzurufen statt
+    mit dessen restriktiven Defaults — sonst siehe Kommentar bei
+    `MAX_UPLOAD_FILES`."""
+    form = await request.form(
+        max_files=MAX_UPLOAD_FILES, max_fields=MAX_UPLOAD_FILES, max_part_size=data.MAX_FILE_SIZE,
+    )
+    try:
+        # form.values()/.items() deduplizieren nach Feldname (letzter Wert
+        # gewinnt) — bei mehreren Dateien unter demselben "files"-Feldnamen
+        # bleibt sonst nur die letzte übrig. multi_items() gibt alle Parts.
+        files = [v for _, v in form.multi_items() if isinstance(v, UploadFile)]
+        if not files:
+            raise HTTPException(422, "Keine Dateien übermittelt.")
+        if session_id:
+            try:
+                dest = data.session_path(session_id)
+            except ValueError as e:
+                raise HTTPException(404, str(e)) from e
+        else:
+            session_id, dest = data.new_session()
+
+        errors: list[str] = []
+        for f in files:
+            content = await f.read()
+            errors.extend(data.save_upload(dest, f.filename or "", content))
+    finally:
+        await form.close()
 
     scanned = data.scan(dest)
     return DatasetResponse(

@@ -107,8 +107,8 @@ export function IntroConfig() {
         </div>
       </div>
       <Callout icon="folder">
-        Jede Prüfung braucht ein Datenverzeichnis. Über die Karte „Daten wählen…" lässt sich ein
-        Verzeichnis-Pfad angeben, XML/ZIP hochladen oder eine Datenbank-Ressource laden.
+        Jede Prüfung braucht ein Datenverzeichnis. Über die Karte „Daten wählen…" lassen sich
+        XML/ZIP-Dateien oder ganze Ordner hochladen oder eine Datenbank-Ressource laden.
       </Callout>
     </div>
   )

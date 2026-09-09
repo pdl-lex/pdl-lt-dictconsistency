@@ -12,11 +12,6 @@ const card: CSSProperties = {
   background: 'var(--lt-bg-0)', border: '1px solid var(--lt-line-1)',
   borderRadius: 'var(--lt-r-md)', boxShadow: 'var(--lt-shadow-1)', padding: 14,
 }
-const inputStyle: CSSProperties = {
-  width: '100%', boxSizing: 'border-box', padding: '7px 9px', fontSize: 12,
-  background: 'var(--lt-bg-1)', border: '1px solid var(--lt-line-1)',
-  borderRadius: 'var(--lt-r-sm)', color: 'var(--lt-fg-1)', outline: 'none', fontFamily: 'var(--lt-font-mono)',
-}
 const btnPrimary: CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
   background: 'var(--lt-primary)', color: 'var(--lt-on-primary)', border: '1px solid var(--lt-primary)',
@@ -29,11 +24,11 @@ const btnLoaded: CSSProperties = {
 const selectionSignature = (s: DbSelection) =>
   JSON.stringify([[...s.resource_ids].sort(), [...s.resource_letters].sort(), [...s.articles].sort()])
 
-type Mode = 'Verzeichnis-Pfad' | 'Upload' | 'Datenbank'
+type Mode = 'Upload' | 'Datenbank'
 
 export function DataDialog() {
-  const { setDataDialogOpen, applyDataset, directory } = useWorkbench()
-  const [mode, setMode] = useState<Mode>('Verzeichnis-Pfad')
+  const { setDataDialogOpen, applyDataset } = useWorkbench()
+  const [mode, setMode] = useState<Mode>('Datenbank')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
@@ -55,28 +50,29 @@ export function DataDialog() {
     if (note) { setInfo(note); setError('') } else close()
   }
 
-  // ── Verzeichnis-Pfad ──
-  const [path, setPath] = useState(directory)
-  const pathLoaded = path.trim() !== '' && path.trim() === directory
-  const scanPath = async () => {
-    if (pathLoaded) return
-    setBusy(true); setError(''); setInfo('')
-    try {
-      const ds = await dataApi.scan(path)
-      finish(ds.directory, ds.file_count)
-    } catch (e) { setError(String(e)) } finally { setBusy(false) }
-  }
-
   // ── Upload ──
   const fileRef = useRef<HTMLInputElement>(null)
-  const doUpload = async (files: FileList | null) => {
+  const folderRef = useRef<HTMLInputElement>(null)
+  const [uploadTarget, setUploadTarget] = useState<'file' | 'folder' | null>(null)
+  // Callback-Ref statt useEffect: der Ordner-Input steckt im mode==='Upload'-Zweig
+  // und existiert bei Dialog-Mount (mode ist anfangs 'Datenbank') noch nicht —
+  // ein useEffect mit [] verpasst ihn dann dauerhaft. Der Callback feuert
+  // zuverlässig bei jedem tatsächlichen Mount des Elements.
+  const setFolderRef = (el: HTMLInputElement | null) => {
+    folderRef.current = el
+    if (!el) return
+    // webkitdirectory/directory sind nicht standardisiert und fehlen daher in
+    // den JSX-Typings — als DOM-Attribute statt als Props setzen.
+    for (const attr of ['webkitdirectory', 'directory']) el.setAttribute(attr, '')
+  }
+  const doUpload = async (files: FileList | null, target: 'file' | 'folder') => {
     if (!files || files.length === 0) return
-    setBusy(true); setError(''); setInfo('')
+    setBusy(true); setUploadTarget(target); setError(''); setInfo('')
     try {
       const ds = await dataApi.upload(Array.from(files))
       const errs = ds.errors && ds.errors.length ? ` (${ds.errors.length} übersprungen)` : ''
       finish(ds.directory, ds.file_count, `${ds.file_count} XML-Dateien geladen${errs}. „Weiter", um zu prüfen.`)
-    } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    } catch (e) { setError(String(e)) } finally { setBusy(false); setUploadTarget(null) }
   }
 
   // ── Datenbank (wbdb) ──
@@ -123,25 +119,23 @@ export function DataDialog() {
         </div>
 
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <Segmented options={['Verzeichnis-Pfad', 'Upload', 'Datenbank']} value={mode} onChange={(v) => { setMode(v as Mode); setError(''); setInfo('') }} />
-
-          {mode === 'Verzeichnis-Pfad' && (
-            <div style={card}>
-              <div style={{ fontSize: 12, color: 'var(--lt-fg-3)', marginBottom: 8 }}>Pfad zu einem XML-Verzeichnis auf dem Server.</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input value={path} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && scanPath()} placeholder="/pfad/zu/xml" style={inputStyle} />
-                <button onClick={scanPath} disabled={busy || !path.trim() || pathLoaded} style={pathLoaded ? btnLoaded : btnPrimary}>{busy ? '…' : 'Laden'}</button>
-              </div>
-            </div>
-          )}
+          <Segmented options={['Upload', 'Datenbank']} value={mode} onChange={(v) => { setMode(v as Mode); setError(''); setInfo('') }} />
 
           {mode === 'Upload' && (
             <div style={card}>
-              <div style={{ fontSize: 12, color: 'var(--lt-fg-3)', marginBottom: 10 }}>XML- oder ZIP-Dateien hochladen (ZIP wird entpackt).</div>
-              <input ref={fileRef} type="file" multiple accept=".xml,.zip" style={{ display: 'none' }} onChange={(e) => doUpload(e.target.files)} />
-              <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...btnPrimary, width: '100%' }}>
-                <Icon name="upload" size={13} /> {busy ? 'Lädt…' : 'Dateien auswählen'}
-              </button>
+              <div style={{ fontSize: 12, color: 'var(--lt-fg-3)', marginBottom: 10 }}>
+                XML- oder ZIP-Dateien hochladen (ZIP wird entpackt), oder einen ganzen Ordner (Unterordner bleiben erhalten).
+              </div>
+              <input ref={fileRef} type="file" multiple accept=".xml,.zip" style={{ display: 'none' }} onChange={(e) => doUpload(e.target.files, 'file')} />
+              <input ref={setFolderRef} type="file" multiple style={{ display: 'none' }} onChange={(e) => doUpload(e.target.files, 'folder')} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => fileRef.current?.click()} disabled={busy} style={{ ...btnPrimary, flex: 1 }}>
+                  <Icon name="upload" size={13} /> {uploadTarget === 'file' ? 'Lädt…' : 'Dateien auswählen'}
+                </button>
+                <button onClick={() => folderRef.current?.click()} disabled={busy} style={{ ...btnPrimary, flex: 1 }}>
+                  <Icon name="folder" size={13} /> {uploadTarget === 'folder' ? 'Lädt…' : 'Ordner auswählen'}
+                </button>
+              </div>
             </div>
           )}
 

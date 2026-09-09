@@ -84,6 +84,49 @@ def test_upload_zip_extracts_xml_blocks_escape_and_fake_xml(logged_in_client):
     assert not list(core_data.UPLOADS_ROOT.rglob("evil.xml"))
 
 
+def test_upload_preserves_relative_subfolder(logged_in_client):
+    """Ordner-Upload (webkitdirectory) schickt Dateinamen inkl. Unterordner
+    (z. B. `A/gut.xml`) — die Struktur muss wie bei einem ZIP erhalten bleiben."""
+    content = b'<?xml version="1.0"?><bdo/>'
+    resp = logged_in_client.post(
+        "/api/data/upload", files=[("files", ("A/gut.xml", content, "application/xml"))]
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["file_count"] == 1
+    assert body["errors"] == []
+    assert body["files"][0]["subdir"] == "A"
+    assert body["files"][0]["filename"] == "gut.xml"
+
+
+def test_upload_rejects_path_traversal_filename(logged_in_client):
+    resp = logged_in_client.post(
+        "/api/data/upload", files=[("files", ("../evil.xml", b"<bdo/>", "application/xml"))]
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["file_count"] == 0
+    assert len(body["errors"]) == 1
+    assert not list(core_data.UPLOADS_ROOT.rglob("evil.xml"))
+
+
+def test_upload_exceeds_default_starlette_file_limit(logged_in_client):
+    """Regression: Starlettes MultiPartParser lehnt per Default >1000 Datei-
+    Parts mit einer MultiPartException MITTEN im Body-Stream ab, was ohne die
+    angehobenen Limits in routers/data.py als abgebrochene Verbindung endet
+    (Browser: "NetworkError") statt als Fehlerantwort — z. B. bei einem
+    Ordner-Upload mit mehreren tausend Artikeln (siehe echten bwb-Buchstaben
+    mit 3842 Dateien)."""
+    content = b'<?xml version="1.0"?><bdo/>'
+    n = 1200
+    files = [("files", (f"a{i}.xml", content, "application/xml")) for i in range(n)]
+    resp = logged_in_client.post("/api/data/upload", files=files)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["file_count"] == n
+    assert body["errors"] == []
+
+
 def test_delete_upload_session(logged_in_client):
     content = b'<?xml version="1.0"?><bdo/>'
     upload_resp = logged_in_client.post(
