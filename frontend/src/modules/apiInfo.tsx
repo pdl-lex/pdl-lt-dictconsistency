@@ -101,7 +101,7 @@ export function ApiInfoConfig() {
         <div style={{ fontSize: 11.5, color: 'var(--lt-fg-3)', lineHeight: 1.7, fontFamily: 'var(--lt-font-mono)' }}>
           <div style={{ wordBreak: 'break-all' }}>Basis: {BASE}/api</div>
           <div>Format: JSON (Upload: multipart)</div>
-          <div>Auth: Cookie-Session (POST /api/auth/login)</div>
+          <div>Auth: Cookie-Session, optional (POST /api/auth/login)</div>
         </div>
       </div>
       <div style={card}>
@@ -117,9 +117,14 @@ export function ApiInfoConfig() {
         eines Uploads (<code>POST /api/data/upload</code>).
       </Callout>
       <Callout icon="user">
-        Alle Endpunkte außer <code>/api/auth/*</code> und <code>/api/health</code> verlangen eine
-        angemeldete Session (Cookie <code>lt_session</code>, per <code>POST /api/auth/login</code>);
-        ohne gültige Session antworten sie mit 401.
+        Login ist optional: <code>/api/data/*</code> und alle <code>/api/checks/*</code> (außer{' '}
+        <code>references/run</code>) funktionieren auch ohne Session. Eine Session (Cookie{' '}
+        <code>lt_session</code>, per <code>POST /api/auth/login</code>) bestimmt bei den
+        wbdb-Endpunkten (<code>db-index/*</code>, <code>db-load</code>,{' '}
+        <code>checks/references/run</code>) nur den Datenbank-Zugriffs-Scope — ohne Login gilt der
+        öffentliche Principal <code>anon</code>. Pflicht ist Login nur für{' '}
+        <code>GET /api/auth/me</code> (401 ohne) und alle <code>/api/admin/*</code>-Endpunkte
+        (401/403 ohne Admin-Session).
       </Callout>
     </div>
   )
@@ -183,15 +188,20 @@ export function ApiInfoMain() {
         </div>
 
         <Callout icon="bolt">
-          Alle Endpunkte liegen unter <code>{BASE}/api</code>, Antworten sind JSON. Bis auf{' '}
-          <code>/auth/*</code> und <code>/health</code> ist eine angemeldete Session nötig
-          (Cookie <code>lt_session</code>, siehe <code>POST /api/auth/login</code> unten). Fehler
-          kommen als HTTP-Status (401 = nicht angemeldet, 403 = Pfad außerhalb der erlaubten
-          Datenwurzeln, 404 = Verzeichnis/Session unbekannt, 422 = ungültige Eingabe,
-          500 = interner Fehler) mit Body <code>{'{"detail": "…"}'}</code>. Prüfungen antworten
-          einheitlich mit:
+          Alle Endpunkte liegen unter <code>{BASE}/api</code>, Antworten sind JSON. Login ist
+          optional (Cookie <code>lt_session</code>, siehe <code>POST /api/auth/login</code>
+          unten) — Pflicht nur für <code>GET /auth/me</code> und <code>/admin/*</code>; bei den
+          wbdb-Endpunkten (<code>data/db-index/*</code>, <code>data/db-load</code>,{' '}
+          <code>checks/references/run</code>) bestimmt er nur den Datenbank-Scope (ohne Login:
+          Principal <code>anon</code>). Fehler kommen als HTTP-Status (401 = nicht angemeldet,
+          403 = Pfad außerhalb der erlaubten Datenwurzeln bzw. kein wbdb-Zugriff, 404 =
+          Verzeichnis/Session/Job unbekannt, 409 = wbdb-Index noch nicht aufgebaut, 422 =
+          ungültige Eingabe, 500 = interner Fehler) mit Body <code>{'{"detail": "…"}'}</code> —
+          bei automatischer Eingabevalidierung ist <code>detail</code> statt eines Strings eine
+          Liste von Feld-Fehlern. Die meisten Prüfungen antworten einheitlich mit:
           <div style={{ marginTop: 8 }}><CodeBlock code={genericResponse} /></div>
-          Ausnahme: länger laufende Endpunkte (<code>/checks/references/run</code>,{' '}
+          Ausnahmen: <code>/checks/validator</code> hat eine eigene Antwortform (siehe unten), und
+          länger laufende Endpunkte (<code>/checks/references/run</code>,{' '}
           <code>/data/db-load</code>) starten nur einen Hintergrund-Job und antworten sofort (202)
           mit <code>job_id</code> — das obige Ergebnis kommt dann erst im{' '}
           <code>result</code>-Feld des zugehörigen Job-Status-Endpunkts.
@@ -259,8 +269,9 @@ export function ApiInfoMain() {
         <Endpoint method="GET" path="/api/data/db-index/tree">
           <p style={p0}>
             wbdb-Artikelbaum aus dem lokalen Index-Cache (Ressource → Buchstabe → Artikel),
-            gefiltert auf den wbdb-Principal des angemeldeten Nutzers; ohne zugeordneten Principal
-            403, ohne aufgebauten Index 409 (ein Admin muss ihn per{' '}
+            gefiltert auf den wbdb-Principal des angemeldeten Nutzers (ohne Login: der öffentliche
+            Principal <code>anon</code>); bei Login ohne zugeordneten Principal 403, ohne
+            aufgebauten Index 409 (ein Admin muss ihn per{' '}
             <code>POST /api/admin/wbdb-index/rebuild</code> anlegen). Weitere Endpunkte der
             gleichen Familie: <code>GET …/letter?resource_id=…&amp;letter=…</code> (Artikel eines
             Buchstabens, lazy beim Aufklappen), <code>GET …/search?q=…</code> (Lemma/Artikel-ID),
@@ -364,6 +375,29 @@ export function ApiInfoMain() {
     "directory": "${dir.replace(/\\/g, '/')}",
     "search_mode": "Direkte Verschachtelung",
     "tag_input": "sense"
+  }'`} />
+        </Endpoint>
+
+        <Endpoint method="POST" path="/api/checks/numbering">
+          <p style={p0}>
+            Bedeutungsnummerierung prüfen. <code>tag_name</code>/<code>attribute_name</code> geben
+            das Element und Attribut mit der (kumulativen) Nummer an; <code>levels</code> (1–5)
+            legt je Verschachtelungsebene das Zahlenformat (<code>arabisch</code> ·{' '}
+            <code>kleinbuchstabe</code> · <code>grossbuchstabe</code> · <code>griechisch</code> ·
+            {' '}<code>roemisch_gross</code> · <code>roemisch_klein</code>) und die Leer-Regel
+            (<code>pflicht</code> · <code>einzelbedeutung</code> · <code>immer</code>) fest;{' '}
+            <code>max_depth</code> begrenzt die erlaubte Tiefe. Optional{' '}
+            <code>leading_level</code> für eine vorgeschaltete Sonder-Ebene (z. B.
+            Wortart-Gruppierung „I"/„II" vor den eigentlichen Bedeutungen).
+          </p>
+          <CodeBlock label="Anfrage" code={`curl -X POST ${BASE}/api/checks/numbering \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "directory": "${dir.replace(/\\/g, '/')}",
+    "tag_name": "bedeutung-position",
+    "attribute_name": "nr",
+    "levels": [{"format": "arabisch", "empty_rule": "pflicht"}],
+    "max_depth": 1
   }'`} />
         </Endpoint>
 

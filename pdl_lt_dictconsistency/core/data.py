@@ -41,17 +41,31 @@ def allowed_data_roots() -> list[Path] | None:
     return [Path(p).expanduser().resolve() for p in raw.split(os.pathsep) if p.strip()]
 
 
+def _is_own_upload_session(base: Path) -> bool:
+    """True nur für UPLOADS_ROOT/<session-id>(/...), nie für UPLOADS_ROOT
+    selbst — sonst wäre die (unrätbare) Session-ID als einzige Zugriffskontrolle
+    für Uploads wirkungslos: `directory=UPLOADS_ROOT` sähe sonst rekursiv die
+    Sessions aller Nutzer (gleiches Muster wie `session_path()`)."""
+    root = UPLOADS_ROOT.resolve()
+    if base == root or not base.is_relative_to(root):
+        return False
+    return bool(re.fullmatch(r"[0-9a-f]{32}", base.relative_to(root).parts[0]))
+
+
 def ensure_allowed_directory(directory: str | Path) -> Path:
     """Verzeichnis auflösen und gegen LT_DATA_ROOTS prüfen.
 
-    Upload-Sessions (UPLOADS_ROOT) sind immer erlaubt. resolve() normalisiert
-    ../-Tricks und Symlinks. Wirft PermissionError bei Verstoß.
+    Eine konkrete Upload-Session ist immer erlaubt, UPLOADS_ROOT selbst nicht
+    (siehe `_is_own_upload_session`). resolve() normalisiert ../-Tricks und
+    Symlinks. Wirft PermissionError bei Verstoß.
     """
     base = Path(directory).expanduser().resolve()
     roots = allowed_data_roots()
     if roots is None:
         return base
-    for root in (*roots, UPLOADS_ROOT.resolve()):
+    if _is_own_upload_session(base):
+        return base
+    for root in roots:
         if base.is_relative_to(root):
             return base
     raise PermissionError(

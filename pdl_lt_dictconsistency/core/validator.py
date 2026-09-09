@@ -8,7 +8,7 @@ from typing import Iterable, Iterator
 from lxml import etree
 
 from .common import DEFAULT_CHUNK_SIZE
-from .source import XmlFileRef, get_quelle
+from .source import XmlFileRef, get_quelle, make_parser
 
 WELLFORMED = "Wohlgeformtheit (Well-formed XML)"
 SCHEMA = "TEI-Lex 0 Schema (RelaxNG)"
@@ -75,10 +75,15 @@ def run_validation(
             has_wf_error = False
             has_sc_error = False
             try:
-                # Bewusst der Standard-Parser: Entity-Auflösung gehört zur
-                # Wohlgeformtheitsprüfung (libxml2 begrenzt Entity-Expansion).
+                # Gehärteter Parser wie überall sonst in core/ (keine externen
+                # Entities/DTDs, kein Netzwerk) — ein Standard-Parser würde
+                # z. B. `<!ENTITY x SYSTEM "file:///etc/passwd">` auflösen und
+                # den Dateiinhalt über Attribute wie wb/band/heft (get_quelle)
+                # in die API-Antwort durchreichen (XXE). Undeklarierte/kaputte
+                # Entity-Referenzen bleiben trotzdem ein Wohlgeformtheitsfehler,
+                # das prüft libxml2 unabhängig von resolve_entities.
                 with open(ref.resolve(base), "rb") as f:
-                    doc = etree.parse(f)
+                    doc = etree.parse(f, parser=make_parser())
                 quelle = get_quelle(doc.getroot(), ref.filename)
                 if rng_schema is not None and not rng_schema.validate(doc):
                     has_sc_error = True
