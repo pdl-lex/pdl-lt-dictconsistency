@@ -41,34 +41,66 @@ function GhostButton({ icon, onClick, children }: { icon: IconName; onClick: () 
 interface CheckEntry { label: string; group: string; description: string; id?: string; planned?: boolean }
 
 const CHECKS: CheckEntry[] = [
-  { label: 'Daten', group: 'Start', id: 'data',
-    description: 'Daten aus einem Server-Verzeichnis laden, XML-/ZIP-Dateien hochladen, oder eine vorkonfigurierte Datenquelle wählen.' },
-  { label: 'API', group: 'Start', id: 'api',
-    description: 'Referenz aller REST-Endpunkte (Daten-Ingest + Prüfungen) mit kopierbaren Beispielabfragen.' },
-  { label: 'Artikelsuche', group: 'Start', id: 'artikelsuche',
-    description: 'Freitextsuche über den Dateinamen im wbdb-Artikelbestand, mit Anzeige des gefundenen Artikels als Roh-XML.' },
-  { label: 'XML/TL0 Validator', group: 'XML', id: 'validator',
-    description: 'Prüfung auf XML-Wohlgeformtheit und TEI-Lex 0 Konformität.' },
-  { label: 'Strukturanalyse', group: 'XML', id: 'structure',
-    description: 'Führt den XML-Baum aller Dateien eines Verzeichnisses zusammen, zeigt Tags, Attribute und Textbeispiele und erlaubt die Projektion einzelner Dateien in den Gesamtbaum.' },
-  { label: 'Tag- und Pfadsuche', group: 'XML', id: 'pathfinder',
-    description: 'Suche nach bestimmten Tags oder Pfaden im XML-Baum, inklusive Wildcards.' },
-  { label: 'Inhalt / Leere Tags', group: 'XML', id: 'content',
-    description: 'Suche nach Textinhalten, leeren Tags und Umbrüchen.' },
-  { label: 'Einmaligkeit', group: 'XML', id: 'unique',
-    description: 'Prüft, ob Tags oder Attribute innerhalb eines Dokuments mehrfach vorkommen.' },
-  { label: 'Verschachtelung', group: 'XML', id: 'nesting',
-    description: 'Analysiert Verschachtelung und Verschachtelungstiefe von Tags.' },
-  { label: 'Verweise', group: 'XML', id: 'references',
-    description: 'Prüft Verweise (BDO-Artikelreferenzen gegen die Datenbank und/oder http(s)-Links) auf Erreichbarkeit ihres Ziels.' },
-  { label: 'Anzahl und Länge', group: 'Stil und Schreibung', id: 'stats',
-    description: 'Bedeutungsangaben (o. ä.) werden hinsichtlich ihrer Anzahl sowie minimaler und maximaler Länge ausgewertet.' },
-  { label: 'Alte Rechtschreibung', group: 'Stil und Schreibung', id: 'spelling',
-    description: 'Beliebige Tags können auf alte Rechtschreibung geprüft werden. Ausgegeben wird eine Liste falsch geschriebener Wörter mit Korrekturvorschlägen sowie Vereinheitlichungsvorschlägen (DWDS als Referenz) bei mehreren erlaubten Schreibweisen.' },
-  { label: 'LLM-Anfrage', group: 'LLM', planned: true,
-    description: 'Einzelne oder mehrere XML-Dateien an ein lokales oder Cloud-LLM senden; per Chat Fragen stellen und Analysen vornehmen. Noch nicht auf die neue Oberfläche portiert.' },
-  { label: 'Texterkennung (OCR)', group: 'LLM', planned: true,
-    description: 'Texterkennung für gescannte Vorlagen. Noch nicht auf die neue Oberfläche portiert.' },
+  {
+    label: 'Daten', group: 'Start', id: 'data',
+    description: 'Daten aus einem Verzeichnis laden, XML-/ZIP-Dateien hochladen, oder eine vorkonfigurierte Datenquelle wählen.'
+  },
+  {
+    label: 'API', group: 'Start', id: 'api',
+    description: 'Referenz aller REST-Endpunkte (Daten-Ingest + Prüfungen) mit kopierbaren Beispielabfragen.'
+  },
+  {
+    label: 'Artikelsuche', group: 'Start', id: 'artikelsuche',
+    description: 'Freitextsuche über den Dateinamen im wbdb-Artikelbestand, mit Anzeige des gefundenen Artikels als Roh-XML.'
+  },
+  {
+    label: 'XML/TL0 Validator', group: 'XML', id: 'validator',
+    description: 'Prüfung auf XML-Wohlgeformtheit und TEI-Lex 0 Konformität.'
+  },
+  {
+    label: 'Strukturanalyse', group: 'XML', id: 'structure',
+    description: 'Führt den XML-Baum aller Dateien eines Verzeichnisses zusammen, zeigt Tags, Attribute und Textbeispiele und erlaubt die Projektion einzelner Dateien in den Gesamtbaum.'
+  },
+  {
+    label: 'Tag- und Pfadsuche', group: 'XML', id: 'pathfinder',
+    description: 'Suche nach bestimmten Tags oder Pfaden im XML-Baum, inklusive Wildcards.'
+  },
+  {
+    label: 'Einmaligkeit', group: 'XML', id: 'unique',
+    description: 'Prüft, ob Tags oder Attribute innerhalb eines Dokuments mehrfach vorkommen.'
+  },
+  {
+    label: 'Verschachtelung', group: 'XML', id: 'nesting',
+    description: 'Analysiert Verschachtelung und Verschachtelungstiefe von Tags.'
+  },
+  {
+    label: 'Inhalt / Leere Tags', group: 'XML', id: 'content',
+    description: 'Suche nach Textinhalten, leeren Tags und Umbrüchen.'
+  },
+  {
+    label: 'Bedeutungsnummerierung', group: 'XML', id: 'numbering',
+    description: 'Prüft die Nummerieung von Bedeutungsebenen.'
+  },
+  {
+    label: 'Verweise', group: 'XML', id: 'references',
+    description: 'Prüft Verweise (BDO-Artikelreferenzen gegen die Datenbank und/oder http(s)-Links) auf Erreichbarkeit ihres Ziels.'
+  },
+  {
+    label: 'Anzahl und Länge', group: 'Stil und Schreibung', id: 'stats',
+    description: 'Bedeutungsangaben (o. ä.) werden hinsichtlich ihrer Anzahl sowie minimaler und maximaler Länge ausgewertet.'
+  },
+  {
+    label: 'Alte Rechtschreibung', group: 'Stil und Schreibung', id: 'spelling',
+    description: 'Beliebige Tags können auf alte Rechtschreibung geprüft werden. Ausgegeben wird eine Liste falsch geschriebener Wörter mit Korrekturvorschlägen sowie Vereinheitlichungsvorschlägen (DWDS als Referenz) bei mehreren erlaubten Schreibweisen.'
+  },
+  {
+    label: 'LLM-Anfrage', group: 'LLM', planned: true,
+    description: 'Einzelne oder mehrere XML-Dateien an ein lokales oder Cloud-LLM senden; per Chat Fragen stellen und Analysen vornehmen. Noch nicht auf die neue Oberfläche portiert.'
+  },
+  {
+    label: 'Texterkennung (OCR)', group: 'LLM', planned: true,
+    description: 'Texterkennung für gescannte Vorlagen. Noch nicht auf die neue Oberfläche portiert.'
+  },
 ]
 
 const GROUP_ORDER = ['Start', 'XML', 'Stil und Schreibung', 'LLM']
@@ -127,7 +159,7 @@ export function IntroConfigPane({ layout }: { layout: LayoutMode }) {
         <div className="lt-eyebrow" style={{ marginBottom: 4 }}>Start</div>
         <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Einführung</h2>
         <p style={{ margin: '6px 0 0', color: 'var(--lt-fg-3)', fontSize: 12, lineHeight: 1.45 }}>
-          Überblick über alle verfügbaren Prüfungen.
+          Erste Schritte
         </p>
       </div>
       <IntroConfig />
@@ -142,7 +174,7 @@ export function IntroMain() {
       <div style={{ maxWidth: 860, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div>
           <div className="lt-eyebrow" style={{ marginBottom: 4 }}>Start</div>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Willkommen</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>Überblick</h2>
           <p style={{ margin: '6px 0 0', color: 'var(--lt-fg-3)', fontSize: 12.5, lineHeight: 1.55 }}>
             Dieses Werkzeug bietet verschiedene Möglichkeiten zur Konsistenzprüfung von
             Wörterbüchern auf XML-Basis. Es funktioniert mit beliebigen XML-Schemata, am besten
