@@ -22,6 +22,14 @@ class NumberingRequest(FileSelection):
     attribute_name: str = Field(..., description="Attribut mit der Nummer, z. B. 'nr'")
     levels: list[NumberingLevelRequest] = Field(..., description=f"1 bis {MAX_LEVELS} Ebenen-Konfigurationen")
     max_depth: int = Field(..., description="Maximale erlaubte Verschachtelungstiefe (1..len(levels))")
+    leading_level: NumberingLevelRequest | None = Field(
+        None,
+        description=(
+            "Optionale vorgeschaltete Sonder-Ebene (z. B. Wortart-Gruppierung "
+            "'I'/'II' vor den eigentlichen Bedeutungen). Wird pro Wurzel-"
+            "Geschwistergruppe automatisch anhand des Nummernformats erkannt."
+        ),
+    )
 
     def validate_inputs(self) -> None:
         if not self.tag_name.strip():
@@ -37,6 +45,11 @@ class NumberingRequest(FileSelection):
                 raise HTTPException(422, f"Unbekannte Leer-Regel: {level.empty_rule!r}")
         if not (1 <= self.max_depth <= len(self.levels)):
             raise HTTPException(422, f"max_depth muss zwischen 1 und {len(self.levels)} liegen.")
+        if self.leading_level is not None:
+            if self.leading_level.format not in FORMATS:
+                raise HTTPException(422, f"Unbekanntes Format: {self.leading_level.format!r}")
+            if self.leading_level.empty_rule not in EMPTY_RULES:
+                raise HTTPException(422, f"Unbekannte Leer-Regel: {self.leading_level.empty_rule!r}")
 
 
 @router.post("/numbering", response_model=GenericCheckResponse)
@@ -44,11 +57,15 @@ def check_numbering(req: NumberingRequest) -> GenericCheckResponse:
     req.validate_inputs()
     base, files = resolve_files(req)
     levels = [NumberingLevel(format=level.format, empty_rule=level.empty_rule) for level in req.levels]
+    leading_level = (
+        NumberingLevel(format=req.leading_level.format, empty_rule=req.leading_level.empty_rule)
+        if req.leading_level is not None else None
+    )
     try:
         return timed_response(run_numbering(
             files, base,
             tag_name=req.tag_name, attribute_name=req.attribute_name,
-            levels=levels, max_depth=req.max_depth,
+            levels=levels, max_depth=req.max_depth, leading_level=leading_level,
         ))
     except InvalidExpressionError as e:
         raise HTTPException(422, str(e)) from e

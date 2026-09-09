@@ -10,7 +10,7 @@ export interface SpellingPair { alt: string; neu: string }
 export type NumberingFormat = 'arabisch' | 'kleinbuchstabe' | 'grossbuchstabe' | 'griechisch' | 'roemisch_gross' | 'roemisch_klein'
 export type NumberingEmptyRule = 'pflicht' | 'einzelbedeutung' | 'immer'
 export interface NumberingLevel { format: NumberingFormat; empty_rule: NumberingEmptyRule }
-export interface NumberingScheme { levels: NumberingLevel[]; max_depth: number }
+export interface NumberingScheme { levels: NumberingLevel[]; max_depth: number; leading_level?: NumberingLevel | null }
 
 export const NUMBERING_FORMATS: { value: NumberingFormat; label: string }[] = [
   { value: 'arabisch', label: 'Arabisch (1, 2, 3, …)' },
@@ -26,6 +26,10 @@ export const NUMBERING_EMPTY_RULES: { value: NumberingEmptyRule; label: string }
   { value: 'einzelbedeutung', label: 'Optional bei Einzelbedeutung (keine Geschwister)' },
   { value: 'immer', label: 'Immer optional' },
 ]
+
+/** Ausgangswert, wenn die vorgeschaltete Sonder-Ebene aktiviert wird — an
+ *  ihr typischstes Beispiel angelehnt (BWB: römisch groß vor Wortarten). */
+export const DEFAULT_LEADING_LEVEL: NumberingLevel = { format: 'roemisch_gross', empty_rule: 'einzelbedeutung' }
 
 /** Vorlagen fürs Nummerierungsschema — Ausgangspunkt, danach frei editierbar.
  *  „BWB/DIBS-Schema" ist an echten bdo-Daten verifiziert (bwb/dibs: arabisch →
@@ -249,6 +253,7 @@ export const MODULES: ModuleDef[] = [
       return api.post<CheckResult>('/checks/numbering', {
         directory, tag_name: c.tag_name, attribute_name: c.attribute_name,
         levels: scheme.levels, max_depth: scheme.max_depth,
+        leading_level: scheme.leading_level ?? null,
       })
     },
   },
@@ -298,7 +303,11 @@ function cloneDefault(value: Field['default']): Field['default'] {
   if (Array.isArray(value)) return [...value] as string[] | TagAttrPair[] | SpellingPair[]
   if (typeof value === 'object' && value !== null) {
     const scheme = value as NumberingScheme
-    return { ...scheme, levels: scheme.levels.map((l) => ({ ...l })) }
+    return {
+      ...scheme,
+      levels: scheme.levels.map((l) => ({ ...l })),
+      leading_level: scheme.leading_level ? { ...scheme.leading_level } : scheme.leading_level,
+    }
   }
   return value
 }

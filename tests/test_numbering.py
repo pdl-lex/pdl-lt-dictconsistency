@@ -146,6 +146,98 @@ def test_single_sense_without_number_is_allowed(tmp_path):
     assert _run(tmp_path, levels=BWB_SCHEME, max_depth=4) == []
 
 
+def test_leading_level_shifts_children(tmp_path):
+    """BWB-Sonderfall (Alleluja, H-): ein Artikel bündelt zwei Wortarten unter
+    einer vorgeschalteten groß-römischen Ebene. Die arabische Nummerierung
+    darunter beginnt bei jeder Gruppe neu (kein 'I1'-Präfix), Ebene 2
+    (Kleinbuchstabe) bleibt an der ursprünglichen Position 2."""
+    _write(tmp_path, "alleluja.xml", """
+        <bedeutung-position nr="I">
+            <bedeutung-position nr="1"/>
+            <bedeutung-position nr="2"/>
+        </bedeutung-position>
+        <bedeutung-position nr="II">
+            <bedeutung-position nr="1"/>
+            <bedeutung-position nr="2"/>
+        </bedeutung-position>
+    """)
+    leading = NumberingLevel("roemisch_gross", empty_rule="einzelbedeutung")
+    results = []
+    files = scan_xml_files(tmp_path)
+    for progress in run_numbering(
+        files, tmp_path, tag_name="bedeutung-position", attribute_name="nr",
+        levels=BWB_SCHEME, max_depth=4, leading_level=leading,
+    ):
+        results.extend(progress.results)
+    assert results == []
+
+
+def test_leading_level_absent_falls_back_to_normal_scheme(tmp_path):
+    """Ein Artikel ohne die Sonder-Ebene (nur eine Wortart) wird weiterhin
+    normal geprüft — die erste Nummer passt zum Format von Ebene 1, nicht
+    zur vorgeschalteten Ebene, also keine Verschiebung."""
+    _write(tmp_path, "einfach.xml", """
+        <bedeutung-position nr="1"/>
+        <bedeutung-position nr="2"/>
+    """)
+    leading = NumberingLevel("roemisch_gross", empty_rule="einzelbedeutung")
+    results = []
+    files = scan_xml_files(tmp_path)
+    for progress in run_numbering(
+        files, tmp_path, tag_name="bedeutung-position", attribute_name="nr",
+        levels=BWB_SCHEME, max_depth=4, leading_level=leading,
+    ):
+        results.extend(progress.results)
+    assert results == []
+
+
+def test_leading_level_nested_grandchildren_use_shifted_levels(tmp_path):
+    """Unterhalb der Sonder-Ebene gilt das normale Schema wieder kumulativ:
+    '1a' unter '1' bleibt präfixiert, nur die Sonder-Ebene selbst bricht die
+    Präfixkette."""
+    _write(tmp_path, "nested.xml", """
+        <bedeutung-position nr="I">
+            <bedeutung-position nr="1">
+                <bedeutung-position nr="1a"/>
+            </bedeutung-position>
+        </bedeutung-position>
+    """)
+    leading = NumberingLevel("roemisch_gross", empty_rule="einzelbedeutung")
+    results = []
+    files = scan_xml_files(tmp_path)
+    for progress in run_numbering(
+        files, tmp_path, tag_name="bedeutung-position", attribute_name="nr",
+        levels=BWB_SCHEME, max_depth=4, leading_level=leading,
+    ):
+        results.extend(progress.results)
+    assert results == []
+
+
+def test_leading_level_sequence_error_in_special_level(tmp_path):
+    """Eine Lücke in der vorgeschalteten Ebene selbst (hier 'III' statt 'II')
+    wird als Sequenzfehler auf dieser Ebene gemeldet."""
+    _write(tmp_path, "gap_leading.xml", """
+        <bedeutung-position nr="I">
+            <bedeutung-position nr="1"/>
+        </bedeutung-position>
+        <bedeutung-position nr="III">
+            <bedeutung-position nr="1"/>
+        </bedeutung-position>
+    """)
+    leading = NumberingLevel("roemisch_gross", empty_rule="einzelbedeutung")
+    results = []
+    files = scan_xml_files(tmp_path)
+    for progress in run_numbering(
+        files, tmp_path, tag_name="bedeutung-position", attribute_name="nr",
+        levels=BWB_SCHEME, max_depth=4, leading_level=leading,
+    ):
+        results.extend(progress.results)
+    assert len(results) == 1
+    assert results[0]["error_type"] == "Sequenzfehler"
+    assert results[0]["gefunden"] == "III"
+    assert results[0]["erwartet"] == "II"
+
+
 def test_cascading_errors_are_suppressed(tmp_path):
     """Ist eine Bedeutung schon fehlerhaft, werden Folgefehler in ihrem
     Teilbaum nicht zusätzlich gemeldet (ihre Nummer ist als Präfix für

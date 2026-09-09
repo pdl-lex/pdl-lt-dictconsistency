@@ -173,6 +173,16 @@ def _same_tag_parent(elem: etree._Element, tag_name: str) -> etree._Element | No
     return None
 
 
+def _find_root(elem: etree._Element, tag_name: str) -> etree._Element:
+    """Oberstes Element derselben gleichnamigen Verschachtelungskette."""
+    node = elem
+    while True:
+        parent = _same_tag_parent(node, tag_name)
+        if parent is None:
+            return node
+        node = parent
+
+
 def _has_sibling(elem: etree._Element, tag_name: str) -> bool:
     """Ob es (in beliebiger Richtung) ein Geschwister mit demselben Tag gibt."""
     for sib in elem.itersiblings(preceding=True):
@@ -206,18 +216,39 @@ def _check_element(
     attribute_name: str,
     levels: list[NumberingLevel],
     max_depth: int,
+    leading_level: NumberingLevel | None,
+    leading_of: dict[int, bool],
 ) -> dict | None:
-    """Ein einzelnes Bedeutungs-Element prüfen. Liefert eine Fehlerzeile oder None."""
+    """Ein einzelnes Bedeutungs-Element prüfen. Liefert eine Fehlerzeile oder None.
+
+    `leading_of` markiert Wurzel-Elemente (Tiefe 1), die als vorgeschaltete
+    Sonder-Ebene erkannt wurden (z. B. eine Wortart-Gruppierung "I"/"II" vor
+    den eigentlichen Bedeutungen). Ist ein Element selbst diese Sonder-Ebene,
+    wird es gegen `leading_level` statt gegen `levels` geprüft und zählt nicht
+    gegen `max_depth`; seine direkten (gleichnamigen) Kinder rutschen dafür um
+    eine Ebene nach vorn (Tiefe 2 → Ebene 1 aus `levels` usw.) und beziehen
+    sich nicht mehr auf die Nummer der Sonder-Ebene als Präfix — deren
+    Nummerierung startet bei jeder Gruppe neu."""
     depth, _ = get_depth_and_path(elem, tag_name, direct_only=True)
+    parent = _same_tag_parent(elem, tag_name)
+    is_leading = depth == 1 and leading_of.get(id(elem), False)
 
-    if depth > max_depth:
-        return {
-            "line": elem.sourceline or 0, "tiefe": depth,
-            "error_type": "Tiefe überschritten",
-            "gefunden": f"Tiefe {depth}", "erwartet": f"maximal {max_depth} Ebene(n)",
-        }
+    if is_leading:
+        assert leading_level is not None
+        level = leading_level
+        level_label = "vorgeschaltete Ebene"
+    else:
+        offset = 1 if leading_of.get(id(_find_root(elem, tag_name)), False) else 0
+        effective_depth = depth - offset
+        if effective_depth > max_depth:
+            return {
+                "line": elem.sourceline or 0, "tiefe": depth,
+                "error_type": "Tiefe überschritten",
+                "gefunden": f"Tiefe {depth}", "erwartet": f"maximal {max_depth} Ebene(n)",
+            }
+        level = levels[effective_depth - 1]
+        level_label = f"Ebene {effective_depth}"
 
-    level = levels[depth - 1]
     raw = (elem.get(attribute_name) or "").strip()
 
     if not raw:
@@ -228,11 +259,13 @@ def _check_element(
         return {
             "line": elem.sourceline or 0, "tiefe": depth,
             "error_type": "Nummer fehlt",
-            "gefunden": "(fehlt)", "erwartet": f"eine Nummer (Ebene {depth}: {FORMATS[level.format].label})",
+            "gefunden": "(fehlt)", "erwartet": f"eine Nummer ({level_label}: {FORMATS[level.format].label})",
         }
 
-    parent = _same_tag_parent(elem, tag_name)
-    parent_raw = (parent.get(attribute_name) or "").strip() if parent is not None else ""
+    if is_leading or (parent is not None and leading_of.get(id(parent), False)):
+        parent_raw = ""
+    else:
+        parent_raw = (parent.get(attribute_name) or "").strip() if parent is not None else ""
 
     if parent_raw:
         if not raw.startswith(parent_raw):
@@ -251,7 +284,7 @@ def _check_element(
         return {
             "line": elem.sourceline or 0, "tiefe": depth,
             "error_type": "Formatfehler",
-            "gefunden": raw, "erwartet": f"Ebene {depth}: {fmt.label}",
+            "gefunden": raw, "erwartet": f"{level_label}: {fmt.label}",
         }
 
     prev_sib, prev_raw = _previous_numbered_sibling(elem, tag_name, attribute_name)
@@ -281,9 +314,21 @@ def run_numbering(
     attribute_name: str,
     levels: list[NumberingLevel],
     max_depth: int,
+    leading_level: NumberingLevel | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
 ) -> Iterator[Progress]:
-    """Nummerierungsprüfung über mehrere Dateien (pro Datei eine Sequenz)."""
+    """Nummerierungsprüfung über mehrere Dateien (pro Datei eine Sequenz).
+
+    `leading_level` beschreibt eine optionale, vorgeschaltete Sonder-Ebene
+    (z. B. eine Wortart-Gruppierung "I"/"II" vor den eigentlichen
+    Bedeutungen, wie sie im BWB vorkommt, wenn ein Artikel mehrere Wortarten
+    bündelt). Ob sie in einer konkreten Artikel-/Geschwistergruppe vorliegt,
+    wird automatisch pro Wurzel-Geschwistergruppe erkannt (anhand des Formats
+    der ersten Nummer): passt sie zu `leading_level.format` und NICHT zum
+    Format von `levels[0]`, gilt die Gruppe als verschoben — `levels` gilt
+    dann erst ab der nächsten Tiefe, und die Nummerierung darunter beginnt
+    bei jeder Gruppe neu (kein Präfix aus der Sonder-Ebene). Zählt nicht
+    gegen `max_depth`."""
     if not (1 <= len(levels) <= MAX_LEVELS):
         raise ValueError(f"levels muss 1 bis {MAX_LEVELS} Einträge haben (bekam {len(levels)})")
     if not (1 <= max_depth <= len(levels)):
@@ -293,6 +338,11 @@ def run_numbering(
             raise InvalidExpressionError(f"Unbekanntes Format: {level.format!r}")
         if level.empty_rule not in EMPTY_RULES:
             raise InvalidExpressionError(f"Unbekannte Leer-Regel: {level.empty_rule!r}")
+    if leading_level is not None:
+        if leading_level.format not in FORMATS:
+            raise InvalidExpressionError(f"Unbekanntes Format: {leading_level.format!r}")
+        if leading_level.empty_rule not in EMPTY_RULES:
+            raise InvalidExpressionError(f"Unbekannte Leer-Regel: {leading_level.empty_rule!r}")
 
     tag_name = ensure_tag_name(tag_name)
     attribute_name = attribute_name.strip()
@@ -312,6 +362,26 @@ def run_numbering(
                 with open(ref.resolve(base), "rb") as f:
                     doc = etree.parse(f, parser)
                 quelle = get_quelle(doc.getroot(), ref.filename)
+                elements = [e for e in doc.xpath(xpath) if isinstance(e, etree._Element)]
+
+                # Pro Wurzel-Geschwistergruppe (gleicher, nicht gleichnamiger
+                # Elternteil) einmal anhand der ersten Nummer entscheiden, ob
+                # die vorgeschaltete Sonder-Ebene vorliegt — gilt dann für
+                # alle Geschwister der Gruppe einheitlich.
+                leading_of: dict[int, bool] = {}
+                if leading_level is not None:
+                    leading_fmt = FORMATS[leading_level.format]
+                    level1_fmt = FORMATS[levels[0].format]
+                    root_groups: dict[int, list[etree._Element]] = {}
+                    for elem in elements:
+                        if _same_tag_parent(elem, tag_name) is None:
+                            container = elem.getparent()
+                            root_groups.setdefault(id(container) if container is not None else -1, []).append(elem)
+                    for group in root_groups.values():
+                        raw = (group[0].get(attribute_name) or "").strip()
+                        shifted = bool(raw) and leading_fmt.parse(raw) is not None and level1_fmt.parse(raw) is None
+                        for e in group:
+                            leading_of[id(e)] = shifted
 
                 # Ist ein Vorfahre bereits fehlerhaft, wird sein Nummernstring
                 # als Präfix für Nachkommen unzuverlässig — Folgefehler im
@@ -319,9 +389,7 @@ def run_numbering(
                 # Fehler an der Wurzel des Problems wird gemeldet).
                 unreliable: set[int] = set()
 
-                for elem in doc.xpath(xpath):
-                    if not isinstance(elem, etree._Element):
-                        continue
+                for elem in elements:
                     parent = _same_tag_parent(elem, tag_name)
                     if parent is not None and id(parent) in unreliable:
                         unreliable.add(id(elem))
@@ -329,6 +397,7 @@ def run_numbering(
                     error = _check_element(
                         elem, tag_name=tag_name, attribute_name=attribute_name,
                         levels=levels, max_depth=max_depth,
+                        leading_level=leading_level, leading_of=leading_of,
                     )
                     if error is not None:
                         unreliable.add(id(elem))

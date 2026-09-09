@@ -3,7 +3,7 @@ import { api } from '../api/client'
 import { Icon } from '../design/icons'
 import { kc, Segmented } from '../design/widgets'
 import {
-  loadAttrs, loadTags, NUMBERING_EMPTY_RULES, NUMBERING_FORMATS, NUMBERING_TEMPLATES,
+  DEFAULT_LEADING_LEVEL, loadAttrs, loadTags, NUMBERING_EMPTY_RULES, NUMBERING_FORMATS, NUMBERING_TEMPLATES,
   type Field, type NumberingLevel, type NumberingScheme, type SpellingPair, type TagAttrPair,
 } from '../modules/registry'
 import { useWorkbench, type LayoutMode } from '../state/workbench'
@@ -344,11 +344,17 @@ function NumberingSchemeField({ field }: { field: Field }) {
 
   const applyTemplate = (name: string) => {
     const tpl = NUMBERING_TEMPLATES[name]
-    setField(field.key, { max_depth: tpl.max_depth, levels: tpl.levels.map((l) => ({ ...l })) } as NumberingScheme)
+    setField(field.key, { ...value, max_depth: tpl.max_depth, levels: tpl.levels.map((l) => ({ ...l })) } as NumberingScheme)
   }
   const updateLevel = (i: number, patch: Partial<NumberingLevel>) =>
     setField(field.key, { ...value, levels: levels.map((l, idx) => (idx === i ? { ...l, ...patch } : l)) })
   const setMaxDepth = (n: number) => setField(field.key, { ...value, max_depth: n })
+
+  const leadingLevel = value.leading_level ?? null
+  const toggleLeading = (on: boolean) =>
+    setField(field.key, { ...value, leading_level: on ? { ...DEFAULT_LEADING_LEVEL } : null })
+  const updateLeading = (patch: Partial<NumberingLevel>) =>
+    setField(field.key, { ...value, leading_level: { ...(leadingLevel ?? DEFAULT_LEADING_LEVEL), ...patch } })
 
   return (
     <div style={card}>
@@ -367,6 +373,43 @@ function NumberingSchemeField({ field }: { field: Field }) {
           {levels.map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
         </select>
       </div>
+
+      <div style={{
+        border: '1px dashed var(--lt-warn-line)', background: 'var(--lt-warn-soft)',
+        borderRadius: 'var(--lt-r-sm)', padding: '8px 10px', marginBottom: 12,
+      }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <input type="checkbox" checked={leadingLevel !== null} onChange={(e) => toggleLeading(e.target.checked)}
+            style={{ accentColor: 'var(--lt-warn)' }} />
+          <span style={{
+            fontSize: 9.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+            color: 'var(--lt-warn)', border: '1px solid var(--lt-warn-line)', borderRadius: 999,
+            padding: '1px 6px',
+          }}>Sonderfall</span>
+          <span style={{ fontSize: 11.5, fontWeight: 600 }}>Vorgeschaltete Ebene</span>
+        </label>
+        <p style={{ fontSize: 10.5, color: 'var(--lt-fg-2)', margin: '6px 0 0', lineHeight: 1.4 }}>
+          Für Artikel, die mehrere Wortarten/Wörter bündeln (z. B. „I N. … II Interj."). Wird{' '}
+          <strong>automatisch pro Artikel erkannt</strong> — passt die erste Nummer zu diesem Format statt zu
+          Ebene 1, verschieben sich Ebene 1, 2, … für diesen Artikel um eine Stufe nach unten; ohne diese
+          Ebene bleibt das normale Schema unverändert in Kraft.
+        </p>
+        {leadingLevel !== null && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <select value={leadingLevel.format}
+              onChange={(e) => updateLeading({ format: e.target.value as NumberingLevel['format'] })}
+              style={{ ...inputStyle, flex: 1 }}>
+              {NUMBERING_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </select>
+            <select value={leadingLevel.empty_rule}
+              onChange={(e) => updateLeading({ empty_rule: e.target.value as NumberingLevel['empty_rule'] })}
+              style={{ ...inputStyle, flex: 1 }}>
+              {NUMBERING_EMPTY_RULES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+        )}
+      </div>
+
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
         <thead>
           <tr>
