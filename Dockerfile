@@ -1,5 +1,5 @@
 # ---- Stage 1: Frontend bauen (React + Vite) ----
-FROM node:22-slim AS frontend
+FROM node:24-slim AS frontend
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci
